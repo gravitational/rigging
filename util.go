@@ -59,7 +59,7 @@ func CreateSecretFromMap(name string, values map[string]string) ([]byte, error) 
 		}
 	}
 
-	cmd := KubeCommand("create", "configmap", name, "--from-file="+dir)
+	cmd := KubeCommand("create", "secret", "generic", name, "--from-file="+dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, trace.Wrap(err)
