@@ -2,6 +2,15 @@ package rigging
 
 // types so we can load k8s JSON
 
+type Job struct {
+	Status JobStatus
+}
+
+type JobStatus struct {
+	Succeeded int
+	Active    int
+}
+
 type ReplicationController struct {
 	Status ReplicationControllerStatus
 }
