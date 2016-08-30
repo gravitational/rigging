@@ -40,12 +40,7 @@ func GetRCPods(name string) (*PodList, error) {
 }
 
 func ScaleReplicationController(name string, replicas int, tries int) error {
-	pods, err := GetRCPods(name)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	err = WaitForNPods(pods, 1, time.Second, tries)
+	err := WaitForRCPods(name, 1, time.Second, tries)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -58,12 +53,7 @@ func ScaleReplicationController(name string, replicas int, tries int) error {
 			return trace.Wrap(err)
 		}
 
-		pods, err = GetRCPods(name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		err = WaitForNPods(pods, i+1, time.Second, tries)
+		err = WaitForRCPods(name, i+1, time.Second, tries)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -86,4 +76,31 @@ func GetReplicationController(name string) (*ReplicationController, error) {
 	}
 
 	return &rc, nil
+}
+
+func WaitForRCPods(rcName string, desired int, delay time.Duration, tries int) error {
+	for i := 0; i < tries; i++ {
+		pods, err := GetRCPods(rcName)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		healthy := 0
+		for _, pod := range pods.Items {
+			for _, condition := range pod.Status.Conditions {
+				if condition.Type == "Ready" && condition.Status == "True" {
+					healthy++
+					break
+				}
+			}
+		}
+
+		log.Infof("looking for %d pods, have %d pods, %d healthy", desired, len(pods.Items), healthy)
+		if len(pods.Items) == desired && healthy == desired {
+			return nil
+		}
+		time.Sleep(delay)
+	}
+
+	return trace.Errorf("timed out waiting for pods")
 }
