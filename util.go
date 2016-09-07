@@ -15,8 +15,8 @@
 package rigging
 
 import (
+	"bytes"
 	"io"
-	"os"
 	"os/exec"
 
 	log "github.com/Sirupsen/logrus"
@@ -48,18 +48,19 @@ func FromFile(act action, path string) ([]byte, error) {
 }
 
 // FromStdin performs action on the Kubernetes resources specified in the string supplied as an argument.
-func FromStdIn(act action, data string) error {
+func FromStdIn(act action, data string) ([]byte, error) {
 	cmd := KubeCommand(string(act), "-f", "-")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	cmd.Stderr = &b
 
 	if err := cmd.Start(); err != nil {
-		return trace.Wrap(err)
+		return b.Bytes(), trace.Wrap(err)
 	}
 
 	io.WriteString(stdin, data)
@@ -67,8 +68,8 @@ func FromStdIn(act action, data string) error {
 
 	if err := cmd.Wait(); err != nil {
 		log.Errorf("%v", err)
-		return trace.Wrap(err)
+		return b.Bytes(), trace.Wrap(err)
 	}
 
-	return nil
+	return b.Bytes(), nil
 }
