@@ -24,9 +24,9 @@ import (
 	"github.com/gravitational/trace"
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
-	v1beta1 "k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/1.4/pkg/labels"
 	"k8s.io/client-go/1.4/pkg/util/yaml"
 )
 
@@ -68,12 +68,6 @@ func (c *DSConfig) CheckAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	if c.RetryAttempts == 0 {
-		c.RetryAttempts = DefaultRetryAttempts
-	}
-	if c.RetryPeriod == 0 {
-		c.RetryPeriod = DefaultRetryPeriod
-	}
 	return nil
 }
 
@@ -83,10 +77,18 @@ type DSUpdater struct {
 	daemonSet v1beta1.DaemonSet
 }
 
-func (c *DSUpdater) collectPods() (map[string]v1.Pod, error) {
-	// collect pods to be deleted
-	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
-	podList, err := pods.List(api.ListOptions{})
+// collectPods returns pods created by this daemon set
+func (c *DSUpdater) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
+	set := make(labels.Set)
+	if c.daemonSet.Spec.Selector != nil {
+		for key, val := range c.daemonSet.Spec.Template.Labels {
+			set[key] = val
+		}
+	}
+	pods := c.Client.Core().Pods(daemonSet.Namespace)
+	podList, err := pods.List(api.ListOptions{
+		LabelSelector: set.AsSelector(),
+	})
 	currentPods := make(map[string]v1.Pod, 0)
 	for _, pod := range podList.Items {
 		createdBy, ok := pod.Annotations["kubernetes.io/created-by"]
@@ -99,7 +101,7 @@ func (c *DSUpdater) collectPods() (map[string]v1.Pod, error) {
 			log.Warningf(trace.DebugReport(err))
 			continue
 		}
-		if ref.Reference.Kind == "DaemonSet" && ref.Reference.Name == c.daemonSet.Name {
+		if ref.Reference.Kind == "DaemonSet" && ref.Reference.UID == daemonSet.UID {
 			currentPods[pod.Spec.NodeName] = pod
 			log.Infof("found pod created by this Daemon Set: %v", pod.Name)
 		}
@@ -107,89 +109,91 @@ func (c *DSUpdater) collectPods() (map[string]v1.Pod, error) {
 	return currentPods, nil
 }
 
-func (c *DSUpdater) checkRunning(oldPods, newPods map[string]v1.Pod) error {
-	for nodeName, old := range oldPods {
-		new, ok := newPods[nodeName]
+func (c *DSUpdater) checkRunning(pods map[string]v1.Pod, nodes []v1.Node) error {
+	for _, node := range nodes {
+		new, ok := pods[node.Name]
 		if !ok {
-			return trace.NotFound("not found any pod on node %v", nodeName)
-		}
-		if new.Name == old.Name {
-			return trace.CompareFailed("stil same pod %v, waiting for pod to stop", new.Name)
+			return trace.NotFound("not found any pod on node %v", node.Name)
 		}
 		if new.Status.Phase != v1.PodRunning {
 			return trace.CompareFailed("pod %v is not running yet: %v", new.Name, new.Status.Phase)
 		}
-		log.Infof("node %v: pod %v has been updated to %v", nodeName, old.Name, new.Name)
+		log.Infof("node %v: pod %v is up and running", node.Name, new.Name)
 	}
 	return nil
 }
 
-func (c *DSUpdater) Run(ctx context.Context) error {
-	log.Infof("Starting DaemonSet(%v/%v) update retryAttempts=%v, retryPeriod=%v", c.daemonSet.Namespace, c.daemonSet.Name, c.RetryAttempts, c.RetryPeriod)
+func (c *DSUpdater) Update(ctx context.Context) error {
+	log.Infof("Applying DaemonSet(%v/%v) update", c.daemonSet.Namespace, c.daemonSet.Name)
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
-	currentPods, err := c.collectPods()
+	currentPods, err := c.collectPods(currentDS)
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	log.Infof("deleting current daemon set: %v", currentDS.Name)
+	err = daemons.Delete(c.daemonSet.Name, nil)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	log.Infof("creating new daemon set: %v", c.daemonSet.Name)
+	_, err = daemons.Create(&c.daemonSet)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	log.Infof("new daemon set created successfully")
+	log.Infof("deleting pods created by previous daemon set")
+	for _, pod := range currentPods {
+		log.Infof("deleting pod %v", pod.Name)
+		if err := pods.Delete(pod.Name, nil); err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	return nil
+}
 
-	return withRecover(func() error {
-		log.Infof("deleting current daemon set: %v", currentDS.Name)
-		err = daemons.Delete(c.daemonSet.Name, nil)
+func (c *DSUpdater) nodeSelector() labels.Selector {
+	set := make(labels.Set)
+	for key, val := range c.daemonSet.Spec.Template.Spec.NodeSelector {
+		set[key] = val
+	}
+	return set.AsSelector()
+}
+
+func (c *DSUpdater) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+	if retryAttempts == 0 {
+		retryAttempts = DefaultRetryAttempts
+	}
+	if retryPeriod == 0 {
+		retryPeriod = DefaultRetryPeriod
+	}
+	log.Infof("Checking DaemonSet(%v/%v) status retryAttempts=%v, retryPeriod=%v",
+		c.daemonSet.Namespace, c.daemonSet.Name, retryAttempts, retryPeriod)
+
+	return retry(ctx, retryAttempts, retryPeriod, func() error {
+		daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
+		currentDS, err := daemons.Get(c.daemonSet.Name)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		log.Infof("creating new daemon set: %v", c.daemonSet.Name)
-		_, err := daemons.Create(&c.daemonSet)
+		currentPods, err := c.collectPods(currentDS)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		log.Infof("new daemon set created successfully")
-		log.Infof("deleting pods created by previous daemon set")
-		for _, pod := range currentPods {
-			log.Infof("deleting pod %v", pod.Name)
-			if err := pods.Delete(pod.Name, nil); err != nil {
-				return trace.Wrap(err)
-			}
-		}
-		log.Infof("wating for new pods to start up in place of other pods")
-		return retry(ctx, c.RetryAttempts, c.RetryPeriod, func() error {
-			newPods, err := c.collectPods()
-			if err != nil {
-				return trace.Wrap(err)
-			}
-			return c.checkRunning(currentPods, newPods)
+
+		nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
+			LabelSelector: c.nodeSelector(),
 		})
-	}, func() error {
-		log.Infof("Rolling back update of %v", c.daemonSet.Name)
-		log.Infof("finding any pods to delete")
-		newPods, err := c.collectPods()
+		log.Infof("nodes: %v", c.nodeSelector())
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		log.Infof("deleting pods created by new daemon set")
-		for _, pod := range newPods {
-			log.Infof("deleting pod %v", pod.Name)
-			if err := pods.Delete(pod.Name, nil); err != nil {
-				return trace.Wrap(err)
-			}
-		}
-		err = daemons.Delete(c.daemonSet.Name, nil)
-		if err != nil {
-			log.Warningf("failed to delete daemon set: %v, err: %v", c.daemonSet.Name, err)
-		}
-		currentDS.ResourceVersion = ""
-		currentDS.UID = ""
-		currentDS.CreationTimestamp = unversioned.Time{}
-		_, err = daemons.Create(currentDS)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		return nil
+
+		return c.checkRunning(currentPods, nodes.Items)
 	})
 }
 
@@ -204,6 +208,7 @@ func retry(ctx context.Context, times int, period time.Duration, fn func() error
 		select {
 		case <-ctx.Done():
 			log.Infof("context is closing, return")
+			return err
 		case <-time.After(period):
 		}
 	}

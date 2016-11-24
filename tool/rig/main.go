@@ -41,11 +41,19 @@ func run() error {
 		mode       = app.Flag("mode", "mode to run: 'in' - for running inside the k8s cluster, 'out' to use outside cluster").Default(outCluster).String()
 		kubeConfig = app.Flag("kubeconfig", "path to kubeconfig").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).String()
 
-		cds               = app.Command("ds", "operations on daemon sets")
-		cdsUpdate         = cds.Command("update", "Rolling update daemon set")
-		cdsUpdateFile     = cdsUpdate.Flag("file", "file with new daemon set spec").Short('f').Required().String()
-		cdsUpdateAttempts = cdsUpdate.Flag("retry-atempts", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryAttempts)).Int()
-		cdsUpdatePeriod   = cdsUpdate.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
+		cds = app.Command("ds", "operations on daemon sets")
+
+		cdsUpdate     = cds.Command("update", "Rolling update daemon set")
+		cdsUpdateFile = cdsUpdate.Flag("file", "file with new daemon set spec").Short('f').Required().String()
+
+		cdsStatus         = cds.Command("status", "Check status of a daemon set")
+		cdsStatusFile     = cdsStatus.Flag("file", "file with new daemon set spec").Short('f').Required().String()
+		cdsStatusAttempts = cdsStatus.Flag("retry-atempts", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryAttempts)).Int()
+		cdsStatusPeriod   = cdsStatus.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
+
+		ctr          = app.Command("tx", "operations on update transactions")
+		ctrNamespace = ctr.Flag("namespace", "k8s namespace").Default("default").String()
+		ctrList      = ctr.Command("ls", "List transactions")
 	)
 
 	cmd, err := app.Parse(os.Args[1:])
@@ -58,11 +66,12 @@ func run() error {
 	}
 
 	var client *kubernetes.Clientset
+	var config *rest.Config
 	switch *mode {
 	case inCluster:
 		fmt.Printf("using in cluster config\n")
 		// creates the in-cluster config
-		config, err := rest.InClusterConfig()
+		config, err = rest.InClusterConfig()
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -71,7 +80,7 @@ func run() error {
 			return trace.Wrap(err)
 		}
 	case outCluster:
-		config, err := clientcmd.BuildConfigFromFlags("", *kubeConfig)
+		config, err = clientcmd.BuildConfigFromFlags("", *kubeConfig)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -97,27 +106,62 @@ func run() error {
 
 	switch cmd {
 	case cdsUpdate.FullCommand():
-		return updateDaemonSet(ctx, client, *cdsUpdateFile, *cdsUpdateAttempts, *cdsUpdatePeriod)
+		return updateDaemonSet(ctx, client, *cdsUpdateFile)
+	case cdsStatus.FullCommand():
+		return statusDaemonSet(ctx, client, *cdsStatusFile, *cdsStatusAttempts, *cdsStatusPeriod)
+	case ctrList.FullCommand():
+		return txList(ctx, client, config, *ctrNamespace)
 	}
 
 	return trace.BadParameter("unsupported command: %v", cmd)
 }
 
-func updateDaemonSet(ctx context.Context, client *kubernetes.Clientset, filePath string, retryAttempts int, retryPeriod time.Duration) error {
+func txList(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string) error {
+	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
+		Client: client,
+		Config: config,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	transactions, err := tx.List(ctx, namespace)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	for _, tr := range transactions.Items {
+		fmt.Printf("* %v %v\n", tr.Name, tr.Spec.Status)
+	}
+	return nil
+}
+
+func updateDaemonSet(ctx context.Context, client *kubernetes.Clientset, filePath string) error {
 	data, err := ReadPath(filePath)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	updater, err := rigging.NewDSUpdater(rigging.DSConfig{
-		Reader:        bytes.NewBuffer(data),
-		Client:        client,
-		RetryAttempts: retryAttempts,
-		RetryPeriod:   retryPeriod,
+		Reader: bytes.NewBuffer(data),
+		Client: client,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return updater.Run(ctx)
+	return updater.Update(ctx)
+}
+
+func statusDaemonSet(ctx context.Context, client *kubernetes.Clientset, filePath string, retryAttempts int, retryPeriod time.Duration) error {
+	data, err := ReadPath(filePath)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	updater, err := rigging.NewDSUpdater(rigging.DSConfig{
+		Reader: bytes.NewBuffer(data),
+		Client: client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return updater.Status(ctx, retryAttempts, retryPeriod)
 }
 
 func printHeader(val string) {
