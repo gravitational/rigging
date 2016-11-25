@@ -42,6 +42,9 @@ func NewDSUpdater(config DSConfig) (*DSUpdater, error) {
 	if err := config.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
+	if config.DaemonSet != nil {
+		return &DSUpdater{DSConfig: config, daemonSet: *config.DaemonSet}, nil
+	}
 	ds := v1beta1.DaemonSet{}
 	err := yaml.NewYAMLOrJSONDecoder(config.Reader, 1024).Decode(&ds)
 	if err != nil {
@@ -51,8 +54,10 @@ func NewDSUpdater(config DSConfig) (*DSUpdater, error) {
 }
 
 type DSConfig struct {
-	// Reader with daemon set to update
+	// Reader with daemon set to update, will be used if present
 	Reader io.Reader
+	// DaemonSet is already parsed daemon set, will be used if present
+	DaemonSet *v1beta1.DaemonSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 	// RetryAttempts specifies amount of retry attempts for checks
@@ -62,8 +67,8 @@ type DSConfig struct {
 }
 
 func (c *DSConfig) CheckAndSetDefaults() error {
-	if c.Reader == nil {
-		return trace.BadParameter("missing parameter Reader")
+	if c.Reader == nil && c.DaemonSet == nil {
+		return trace.BadParameter("missing parameter Reader or DaemonSet")
 	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
