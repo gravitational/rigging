@@ -16,6 +16,7 @@ package rigging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -37,22 +38,55 @@ const (
 	DefaultRetryPeriod = time.Second
 )
 
-// NewDSUpdater returns new instance of DaemonSet updater
-func NewDSUpdater(config DSConfig) (*DSUpdater, error) {
-	if err := config.CheckAndSetDefaults(); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	if config.DaemonSet != nil {
-		return &DSUpdater{DSConfig: config, daemonSet: *config.DaemonSet}, nil
-	}
-	ds := v1beta1.DaemonSet{}
-	err := yaml.NewYAMLOrJSONDecoder(config.Reader, 1024).Decode(&ds)
+// NewDSControl returns new instance of DaemonSet updater
+func NewDSControl(config DSConfig) (*DSControl, error) {
+	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return &DSUpdater{DSConfig: config, daemonSet: ds}, nil
+	var ds *v1beta1.DaemonSet
+	if config.DaemonSet != nil {
+		ds = config.DaemonSet
+	} else {
+		ds, err = ParseDaemonSet(config.Reader)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+	return &DSControl{
+		DSConfig:  config,
+		daemonSet: *ds,
+		Entry: log.WithFields(log.Fields{
+			"ds": fmt.Sprintf("%v/%v", Namespace(ds.Namespace), ds.Name),
+		}),
+	}, nil
 }
 
+// ParseDaemonSet parses daemon set from reader
+func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	ds := v1beta1.DaemonSet{}
+	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ds)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &ds, nil
+}
+
+// ParseSerializedReference parses serialized reference object
+// used in annotations
+func ParseSerializedReference(r io.Reader) (*api.SerializedReference, error) {
+	ref := api.SerializedReference{}
+	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ref)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &ref, nil
+}
+
+// DSConfig is a DaemonSet control configuration
 type DSConfig struct {
 	// Reader with daemon set to update, will be used if present
 	Reader io.Reader
@@ -76,14 +110,16 @@ func (c *DSConfig) CheckAndSetDefaults() error {
 	return nil
 }
 
-// DSUpdater is a daemon set updater
-type DSUpdater struct {
+// DSControl is a daemon set controller,
+// adds various operations, like delete, status check and update
+type DSControl struct {
 	DSConfig
 	daemonSet v1beta1.DaemonSet
+	*log.Entry
 }
 
 // collectPods returns pods created by this daemon set
-func (c *DSUpdater) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
+func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	if c.daemonSet.Spec.Selector != nil {
 		for key, val := range c.daemonSet.Spec.Template.Labels {
@@ -94,27 +130,29 @@ func (c *DSUpdater) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 	podList, err := pods.List(api.ListOptions{
 		LabelSelector: set.AsSelector(),
 	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	currentPods := make(map[string]v1.Pod, 0)
 	for _, pod := range podList.Items {
-		createdBy, ok := pod.Annotations["kubernetes.io/created-by"]
+		createdBy, ok := pod.Annotations[annotationCreatedBy]
 		if !ok {
 			continue
 		}
-		ref := api.SerializedReference{}
-		err = yaml.NewYAMLOrJSONDecoder(strings.NewReader(createdBy), 1024).Decode(&ref)
+		ref, err := ParseSerializedReference(strings.NewReader(createdBy))
 		if err != nil {
 			log.Warningf(trace.DebugReport(err))
 			continue
 		}
-		if ref.Reference.Kind == "DaemonSet" && ref.Reference.UID == daemonSet.UID {
+		if ref.Reference.Kind == KindDaemonSet && ref.Reference.UID == daemonSet.UID {
 			currentPods[pod.Spec.NodeName] = pod
-			log.Infof("found pod created by this Daemon Set: %v", pod.Name)
+			c.Infof("found pod created by this Daemon Set: %v", pod.Name)
 		}
 	}
 	return currentPods, nil
 }
 
-func (c *DSUpdater) checkRunning(pods map[string]v1.Pod, nodes []v1.Node) error {
+func (c *DSControl) checkRunning(pods map[string]v1.Pod, nodes []v1.Node) error {
 	for _, node := range nodes {
 		new, ok := pods[node.Name]
 		if !ok {
@@ -123,13 +161,13 @@ func (c *DSUpdater) checkRunning(pods map[string]v1.Pod, nodes []v1.Node) error 
 		if new.Status.Phase != v1.PodRunning {
 			return trace.CompareFailed("pod %v is not running yet: %v", new.Name, new.Status.Phase)
 		}
-		log.Infof("node %v: pod %v is up and running", node.Name, new.Name)
+		c.Infof("node %v: pod %v is up and running", node.Name, new.Name)
 	}
 	return nil
 }
 
-func (c *DSUpdater) Update(ctx context.Context) error {
-	log.Infof("Applying DaemonSet(%v/%v) update", c.daemonSet.Namespace, c.daemonSet.Name)
+func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
+	c.Infof("Delete")
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
@@ -140,18 +178,15 @@ func (c *DSUpdater) Update(ctx context.Context) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	log.Infof("deleting current daemon set: %v", currentDS.Name)
+	c.Infof("deleting current daemon set")
 	err = daemons.Delete(c.daemonSet.Name, nil)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	log.Infof("creating new daemon set: %v", c.daemonSet.Name)
-	_, err = daemons.Create(&c.daemonSet)
-	if err != nil {
-		return trace.Wrap(err)
+	if !cascade {
+		c.Infof("cascade not set, returning")
 	}
-	log.Infof("new daemon set created successfully")
-	log.Infof("deleting pods created by previous daemon set")
+	c.Infof("deleting pods")
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
@@ -161,7 +196,54 @@ func (c *DSUpdater) Update(ctx context.Context) error {
 	return nil
 }
 
-func (c *DSUpdater) nodeSelector() labels.Selector {
+func (c *DSControl) Upsert(ctx context.Context) error {
+	c.Infof("Upsert")
+	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
+	currentDS, err := daemons.Get(c.daemonSet.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return trace.Wrap(err)
+		}
+		// api always returns object, this is inconvenent
+		currentDS = nil
+	}
+	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
+	var currentPods map[string]v1.Pod
+	if currentDS != nil {
+		c.Infof("currentDS: %v", currentDS)
+		currentPods, err = c.collectPods(currentDS)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		c.Infof("deleting current daemon set")
+		err = daemons.Delete(c.daemonSet.Name, nil)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	c.Infof("creating new daemon set")
+	c.daemonSet.UID = ""
+	c.daemonSet.SelfLink = ""
+	c.daemonSet.ResourceVersion = ""
+	_, err = daemons.Create(&c.daemonSet)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	c.Infof("created successfully")
+	if currentDS != nil {
+		c.Infof("deleting pods created by previous daemon set")
+		for _, pod := range currentPods {
+			c.Infof("deleting pod %v", pod.Name)
+			if err := pods.Delete(pod.Name, nil); err != nil {
+				return trace.Wrap(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *DSControl) nodeSelector() labels.Selector {
 	set := make(labels.Set)
 	for key, val := range c.daemonSet.Spec.Template.Spec.NodeSelector {
 		set[key] = val
@@ -169,15 +251,14 @@ func (c *DSUpdater) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *DSUpdater) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+func (c *DSControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
 	}
 	if retryPeriod == 0 {
 		retryPeriod = DefaultRetryPeriod
 	}
-	log.Infof("Checking DaemonSet(%v/%v) status retryAttempts=%v, retryPeriod=%v",
-		c.daemonSet.Namespace, c.daemonSet.Name, retryAttempts, retryPeriod)
+	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
 
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
 		daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
@@ -193,53 +274,10 @@ func (c *DSUpdater) Status(ctx context.Context, retryAttempts int, retryPeriod t
 		nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
 			LabelSelector: c.nodeSelector(),
 		})
-		log.Infof("nodes: %v", c.nodeSelector())
+		c.Infof("nodes: %v", c.nodeSelector())
 		if err != nil {
 			return trace.Wrap(err)
 		}
-
 		return c.checkRunning(currentPods, nodes.Items)
 	})
-}
-
-func retry(ctx context.Context, times int, period time.Duration, fn func() error) error {
-	var err error
-	for i := 0; i < times; i += 1 {
-		err = fn()
-		if err == nil {
-			return nil
-		}
-		log.Infof("attempt %v, result: %v, retry in %v", i+1, err, period)
-		select {
-		case <-ctx.Done():
-			log.Infof("context is closing, return")
-			return err
-		case <-time.After(period):
-		}
-	}
-	return err
-}
-
-func withRecover(fn func() error, recoverFn func() error) error {
-	shouldRecover := true
-	defer func() {
-		if !shouldRecover {
-			log.Infof("no recovery needed, returning")
-			return
-		}
-		log.Infof("need to recover")
-		err := recoverFn()
-		if err != nil {
-			log.Error(trace.DebugReport(err))
-			return
-		}
-		log.Infof("recovered successfully")
-		return
-	}()
-
-	if err := fn(); err != nil {
-		return err
-	}
-	shouldRecover = false
-	return nil
 }

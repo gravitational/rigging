@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -11,12 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/gravitational/rigging"
 
 	log "github.com/Sirupsen/logrus"
 	logrusSyslog "github.com/Sirupsen/logrus/hooks/syslog"
+	yaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"k8s.io/client-go/1.4/kubernetes"
@@ -37,37 +38,39 @@ func run() error {
 	var (
 		app = kingpin.New("rig", "CLI utility to simplify K8s updates")
 
-		debug      = app.Flag("debug", "turn on debug logging").Default("true").Bool()
-		mode       = app.Flag("mode", "mode to run: 'in' - for running inside the k8s cluster, 'out' to use outside cluster").Default(outCluster).String()
+		debug      = app.Flag("debug", "turn on debug logging").Bool()
 		kubeConfig = app.Flag("kubeconfig", "path to kubeconfig").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).String()
-		namespace  = app.Flag("namespace", "Namespace of the transactions").Default("default").String()
+		namespace  = app.Flag("namespace", "Namespace of the transactions").Default(rigging.DefaultNamespace).String()
 
-		cupsert               = app.Command("upsert", "Upsert resources in the context of a transaction")
-		cpsertTransactionName = cupsert.Arg("transaction", "name of the transaction").Required().String()
-		cupsertFile           = cupsert.Flag("file", "file with new spec").Short('f').Required().String()
+		cupsert            = app.Command("upsert", "Upsert resources in the context of a transaction")
+		cupsertTransaction = Ref(cupsert.Arg("transaction", "name of the transaction").Required())
+		cupsertFile        = cupsert.Flag("file", "file with new resource spec").Short('f').Required().String()
 
-		ctsatus     = app.Command("status", "Check status of all operations in a transaction")
-		cstatusName = cstatus.Arg("resource", "resource to check, e.g. tx/tx1").Required().String()
+		cstatus         = app.Command("status", "Check status of all operations in a transaction")
+		cstatusResource = Ref(cstatus.Arg("resource", "resource to check, e.g. tx/tx1").Required())
+		cstatusAttempts = cstatus.Flag("retry-attempts", "file with new daemon set spec").Default("1").Int()
+		cstatusPeriod   = cstatus.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
 
-		crollback     = app.Command("rollback", "Rollback the transaction")
-		crollbackName = crollback.Arg("transaction", "name of the transaction").Required().String()
+		cget            = app.Command("get", "Display one or many transactions")
+		cgetTransaction = Ref(cget.Arg("transaction", "Transaction name"))
+		cgetOut         = cget.Flag("output", "output type, one of 'yaml' or 'text'").Short('o').Default("").String()
 
-		cds = app.Command("ds", "operations on daemon sets")
+		ctr = app.Command("tx", "low level operations on transactions")
 
-		cdsUpdate     = cds.Command("update", "Rolling update daemon set")
-		cdsUpdateFile = cdsUpdate.Flag("file", "file with new daemon set spec").Short('f').Required().String()
+		ctrDelete            = ctr.Command("delete", "Delete a transaction by name")
+		ctrDeleteTransaction = Ref(ctrDelete.Arg("transaction", "Transaction name").Required())
 
-		cdsStatus         = cds.Command("status", "Check status of a daemon set")
-		cdsStatusFile     = cdsStatus.Flag("file", "file with new daemon set spec").Short('f').Required().String()
-		cdsStatusAttempts = cdsStatus.Flag("retry-atempts", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryAttempts)).Int()
-		cdsStatusPeriod   = cdsStatus.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
+		crollback            = app.Command("rollback", "Rollback the transaction")
+		crollbackTransaction = Ref(crollback.Arg("transaction", "name of the transaction").Required())
 
-		ctr = app.Command("tx", "Operations on transactions")
+		ccommit            = app.Command("commit", "Commit the transaction")
+		ccommitTransaction = Ref(ccommit.Arg("transaction", "name of the transaction").Required())
 
-		ctrRemove     = ctr.Command("rm", "Remove transaction")
-		ctrRemoveName = ctrRemove.Arg("name", "Transaction name").Required().String()
-
-		ctrList = app.Command("ls", "List transactions")
+		cdelete                  = app.Command("delete", "Delete a resource in a context of a transaction")
+		cdeleteCascade           = cdelete.Flag("cascade", "Delete sub resouces, e.g. Pods for Daemonset").Default("true").Bool()
+		cdeleteTransaction       = Ref(cdelete.Arg("transaction", "Transaction name").Required())
+		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
+		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource name to delete").Default(rigging.DefaultNamespace).String()
 	)
 
 	cmd, err := app.Parse(os.Args[1:])
@@ -79,31 +82,9 @@ func run() error {
 		InitLoggerDebug()
 	}
 
-	var client *kubernetes.Clientset
-	var config *rest.Config
-	switch *mode {
-	case inCluster:
-		fmt.Printf("using in cluster config\n")
-		// creates the in-cluster config
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		client, err = kubernetes.NewForConfig(config)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	case outCluster:
-		config, err = clientcmd.BuildConfigFromFlags("", *kubeConfig)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		client, err = kubernetes.NewForConfig(config)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	default:
-		return trace.BadParameter("unsupported mode: %v", *mode)
+	client, config, err := getClient(*kubeConfig)
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -119,26 +100,114 @@ func run() error {
 	}()
 
 	switch cmd {
-	case cdsUpdate.FullCommand():
-		return updateDaemonSet(ctx, client, *cdsUpdateFile)
-	case cdsStatus.FullCommand():
-		return statusDaemonSet(ctx, client, *cdsStatusFile, *cdsStatusAttempts, *cdsStatusPeriod)
-	case ctrList.FullCommand():
-		return txList(ctx, client, config, *namespace)
-	case ctrRemove.FullCommand():
-		return txRemove(ctx, client, config, *namespace, *ctrRemoveName)
+	case cupsert.FullCommand():
+		return upsert(ctx, client, config, *namespace, *cupsertTransaction, *cupsertFile)
 	case cstatus.FullCommand():
-		return txStatus(ctx, client, config, *namespace, *ctrStatusName)
-	case ctrRollback.FullCommand():
-		return txRollback(ctx, client, config, *namespace, *ctrRollbackName)
-	case cdsUpsert.FullCommand():
-		return upsert(ctx, client, config, *namespace, *cdsUpsertTransactionName, *cdsUpsertFile)
+		return status(ctx, client, config, *namespace, *cstatusResource, *cstatusAttempts, *cstatusPeriod)
+	case cget.FullCommand():
+		return get(ctx, client, config, *namespace, *cgetTransaction, *cgetOut)
+	case cdelete.FullCommand():
+		return deleteResource(ctx, client, config, *namespace, *cdeleteTransaction, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade)
+	case ctrDelete.FullCommand():
+		return txDelete(ctx, client, config, *namespace, *ctrDeleteTransaction)
+	case crollback.FullCommand():
+		return rollback(ctx, client, config, *namespace, *crollbackTransaction)
+	case ccommit.FullCommand():
+		return commit(ctx, client, config, *namespace, *ccommitTransaction)
 	}
 
 	return trace.BadParameter("unsupported command: %v", cmd)
 }
 
-func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace, transactionName, filePath string) error {
+func getClient(configPath string) (*kubernetes.Clientset, *rest.Config, error) {
+	// creates the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err == nil {
+		client, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, nil, trace.Wrap(err)
+		}
+		return client, config, nil
+	}
+
+	config, err = clientcmd.BuildConfigFromFlags("", configPath)
+	if err != nil {
+		return nil, nil, trace.Wrap(err)
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, nil, trace.Wrap(err)
+	}
+	return client, config, nil
+}
+
+func Ref(s kingpin.Settings) *rigging.Ref {
+	r := new(rigging.Ref)
+	s.SetValue(r)
+	return r
+}
+
+func rollback(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, transaction rigging.Ref) error {
+	if transaction.Kind != rigging.KindTransaction {
+		return trace.BadParameter("expected %v, got %v", rigging.KindTransaction, transaction.Kind)
+	}
+	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
+		Client: client,
+		Config: config,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = tx.Rollback(ctx, namespace, transaction.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	fmt.Printf("transaction %v rolled back \n", transaction.Name)
+	return nil
+}
+
+func commit(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, transaction rigging.Ref) error {
+	if transaction.Kind != rigging.KindTransaction {
+		return trace.BadParameter("expected %v, got %v", rigging.KindTransaction, transaction.Kind)
+	}
+	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
+		Client: client,
+		Config: config,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = tx.Commit(ctx, namespace, transaction.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	fmt.Printf("transaction %v commited, no further modifications are allowed \n", transaction.Name)
+	return nil
+}
+
+func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, transaction rigging.Ref, resourceNamespace string, resource rigging.Ref, cascade bool) error {
+	if transaction.Kind != rigging.KindTransaction {
+		return trace.BadParameter("expected %v, got %v", rigging.KindTransaction, transaction.Kind)
+	}
+	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
+		Client: client,
+		Config: config,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = tx.DeleteResource(ctx, namespace, transaction.Name, resourceNamespace, resource, cascade)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	fmt.Printf("transaction %v updated \n", transaction.Name)
+	return nil
+}
+
+func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, transaction rigging.Ref, filePath string) error {
+	if transaction.Kind != rigging.KindTransaction {
+		return trace.BadParameter("expected %v, got %v", rigging.KindTransaction, transaction.Kind)
+	}
 	data, err := ReadPath(filePath)
 	if err != nil {
 		return trace.Wrap(err)
@@ -150,15 +219,54 @@ func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = tx.Upsert(ctx, namespace, transactionName, data)
+	err = tx.Upsert(ctx, namespace, transaction.Name, data)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("transaction %v applied \n", transactionName)
+	fmt.Printf("transaction %v updated \n", transaction.Name)
 	return nil
 }
 
-func txList(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string) error {
+func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, resource rigging.Ref, retryAttempts int, retryPeriod time.Duration) error {
+	switch resource.Kind {
+	case rigging.KindTransaction:
+		tx, err := rigging.NewTransaction(rigging.TransactionConfig{
+			Client: client,
+			Config: config,
+		})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		err = tx.Status(ctx, namespace, resource.Name, retryAttempts, retryPeriod)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		fmt.Printf("no errors detected for %v\n", resource.Name)
+		return nil
+	case rigging.KindDaemonSet:
+		ds, err := client.Extensions().DaemonSets(namespace).Get(resource.Name)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		updater, err := rigging.NewDSControl(rigging.DSConfig{
+			DaemonSet: ds,
+			Client:    client,
+		})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return updater.Status(ctx, retryAttempts, retryPeriod)
+	}
+	return trace.BadParameter("don't know how to check status of %v", resource.Kind)
+}
+
+const (
+	outputYAML = "yaml"
+	outputText = "text"
+	outputJSON = "json"
+)
+
+func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, ref rigging.Ref, output string) error {
 	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
 		Client: client,
 		Config: config,
@@ -166,17 +274,68 @@ func txList(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	transactions, err := tx.List(ctx, namespace)
+
+	if ref.Name == "" {
+		transactions, err := tx.List(ctx, namespace)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		switch output {
+		case outputYAML:
+			data, err := yaml.Marshal(transactions)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+			fmt.Printf("%v\n", string(data))
+			return nil
+		default:
+			if len(transactions.Items) == 0 {
+				fmt.Printf("No transactions found\n")
+				return nil
+			}
+			w := new(tabwriter.Writer)
+			w.Init(os.Stdout, 0, 8, 1, '\t', 0)
+			defer w.Flush()
+			fmt.Fprintf(w, "Name\tStatus\tOperations\n")
+			for _, tr := range transactions.Items {
+				fmt.Fprintf(w, "%v\t%v\t%v\n", tr.Name, tr.Spec.Status, len(tr.Spec.Items))
+			}
+			return nil
+		}
+	}
+	tr, err := tx.Get(ctx, namespace, ref.Name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	for _, tr := range transactions.Items {
-		fmt.Printf("* %v %v\n", tr.Name, tr.Spec.Items)
+	switch output {
+	case outputYAML:
+		data, err := yaml.Marshal(tr)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		fmt.Printf("%v\n", string(data))
+		return nil
+	default:
+		fmt.Printf("Transaction %v in namespace %v\n\n", tr.Name, tr.Namespace)
+		w := new(tabwriter.Writer)
+		w.Init(os.Stdout, 0, 8, 1, '\t', 0)
+		defer w.Flush()
+		fmt.Fprintf(w, "Operation\tStatus\tDescription\n")
+		for i, op := range tr.Spec.Items {
+			var info string
+			opInfo, err := rigging.GetOperationInfo(op)
+			if err != nil {
+				info = err.Error()
+			} else {
+				info = opInfo.String()
+			}
+			fmt.Fprintf(w, "%v\t%v\t%v\n", i, op.Status, info)
+		}
+		return nil
 	}
-	return nil
 }
 
-func txRemove(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, name string) error {
+func txDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, tr rigging.Ref) error {
 	tx, err := rigging.NewTransaction(rigging.TransactionConfig{
 		Client: client,
 		Config: config,
@@ -184,42 +343,12 @@ func txRemove(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = tx.Delete(ctx, namespace, name)
+	err = tx.Delete(ctx, namespace, tr.Name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("%v has been removed\n", name)
+	fmt.Printf("%v has been removed\n", tr.Name)
 	return nil
-}
-
-func updateDaemonSet(ctx context.Context, client *kubernetes.Clientset, filePath string) error {
-	data, err := ReadPath(filePath)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	updater, err := rigging.NewDSUpdater(rigging.DSConfig{
-		Reader: bytes.NewBuffer(data),
-		Client: client,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	return updater.Update(ctx)
-}
-
-func statusDaemonSet(ctx context.Context, client *kubernetes.Clientset, filePath string, retryAttempts int, retryPeriod time.Duration) error {
-	data, err := ReadPath(filePath)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	updater, err := rigging.NewDSUpdater(rigging.DSConfig{
-		Reader: bytes.NewBuffer(data),
-		Client: client,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	return updater.Status(ctx, retryAttempts, retryPeriod)
 }
 
 func printHeader(val string) {

@@ -10,3 +10,7 @@ install:
 .PHONY: build
 build:
 	go build ./...
+
+.PHONY: test
+test:
+	go test -v -test.parallel=0 ./...

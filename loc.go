@@ -1,21 +1,10 @@
 package rigging
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gravitational/trace"
-)
-
-const (
-	kindDaemonSet             = "DaemonSet"
-	kindTransaction           = "Transaction"
-	kindConfigMap             = "ConfigMap"
-	kindDeployment            = "Deployment"
-	kindReplicaSet            = "ReplicaSet"
-	kindReplicationController = "ReplicationController"
-	kindService               = "Service"
-	kindSecret                = "Secret"
-	kindJob                   = "Job"
 )
 
 func ParseShortcut(in, defaultVal string) (string, error) {
@@ -24,49 +13,74 @@ func ParseShortcut(in, defaultVal string) (string, error) {
 	}
 	switch strings.ToLower(in) {
 	case "configmaps":
-		return kindConfigMap, nil
+		return KindConfigMap, nil
 	case "daemonsets", "ds":
-		return kindDaemonSet, nil
+		return KindDaemonSet, nil
 	case "transactions", "tx":
-		return kindTransaction, nil
+		return KindTransaction, nil
 	case "deployments":
-		return kindDeployment, nil
+		return KindDeployment, nil
 	case "jobs":
-		return kindJob, nil
+		return KindJob, nil
 	case "replicasets", "rs":
-		return kindReplicaSet, nil
+		return KindReplicaSet, nil
 	case "replicationcontrollers", "rc":
-		return kindReplicationController, nil
+		return KindReplicationController, nil
 	case "secrets":
-		return kindSecret, nil
+		return KindSecret, nil
 	case "services", "svc":
-		return kindService, nil
+		return KindService, nil
 	}
 	return "", trace.BadParameter("unsupported resource: %v", in)
 }
 
+// ParseRef parses resource reference eg daemonsets/ds1
 func ParseRef(ref string) (*Ref, error) {
-	return nil, trace.Wrap(err)
+	if ref == "" {
+		return nil, trace.BadParameter("missing value")
+	}
+	parts := strings.FieldsFunc(ref, isDelimiter)
+	switch len(parts) {
+	case 1:
+		return &Ref{Kind: KindTransaction, Name: parts[0]}, nil
+	case 2:
+		shortcut, err := ParseShortcut(parts[0], KindTransaction)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		return &Ref{Kind: shortcut, Name: parts[1]}, nil
+	}
+	return nil, trace.BadParameter("failed to parse '%v'", ref)
+}
+
+// isDelimiter returns true if rune is space or /
+func isDelimiter(r rune) bool {
+	switch r {
+	case '\t', ' ', '/':
+		return true
+	}
+	return false
 }
 
 // Ref is a resource refernece
 type Ref struct {
-	Kind      string
-	Name      string
-	Namespace string
+	Kind string
+	Name string
 }
 
-func (l *Locator) Set(v string) error {
-	p, err := ParseLocator(v)
+func (r *Ref) IsEmtpy() bool {
+	return r.Name == ""
+}
+
+func (r *Ref) Set(v string) error {
+	out, err := ParseRef(v)
 	if err != nil {
 		return err
 	}
-	l.Repository = p.Repository
-	l.Name = p.Name
-	l.Version = p.Version
+	*r = *out
 	return nil
 }
 
-func (l Locator) String() string {
-	return fmt.Sprintf("%v/%v:%v", l.Repository, l.Name, l.Version)
+func (r *Ref) String() string {
+	return fmt.Sprintf("%v/%v", r.Kind, r.Name)
 }
