@@ -5,14 +5,14 @@ import (
 )
 
 const (
-	txResourceName            = "transaction.tx.gravitational.io"
-	txGroup                   = "tx.gravitational.io"
-	txVersion                 = "v1"
-	txAPIVersion              = "tx.gravitational.io/v1"
-	txCollection              = "transactions"
+	ChangesetResourceName     = "changeset.changeset.gravitational.io"
+	ChangesetGroup            = "changeset.gravitational.io"
+	ChangesetVersion          = "v1"
+	ChangesetAPIVersion       = "changeset.gravitational.io/v1"
+	ChangesetCollection       = "changesets"
 	DefaultNamespace          = "default"
 	KindDaemonSet             = "DaemonSet"
-	KindTransaction           = "Transaction"
+	KindChangeset             = "Changeset"
 	KindConfigMap             = "ConfigMap"
 	KindDeployment            = "Deployment"
 	KindReplicaSet            = "ReplicaSet"
@@ -20,13 +20,13 @@ const (
 	KindService               = "Service"
 	KindSecret                = "Secret"
 	KindJob                   = "Job"
-	annotationCreatedBy       = "kubernetes.io/created-by"
-	opStatusCreated           = "created"
-	opStatusCompleted         = "completed"
-	opStatusRolledBack        = "rolledback"
-	txStatusRolledBack        = "rolledback"
-	txStatusInProgress        = "in-progress"
-	txStatusCommited          = "commited"
+	AnnotationCreatedBy       = "kubernetes.io/created-by"
+	OpStatusCreated           = "created"
+	OpStatusCompleted         = "completed"
+	OpStatusRolledBack        = "rolledback"
+	ChangesetStatusRolledBack = "rolledback"
+	ChangesetStatusInProgress = "in-progress"
+	ChangesetStatusCommited   = "commited"
 	// DefaultRetryAttempts specifies amount of retry attempts for checks
 	DefaultRetryAttempts = 60
 	// RetryPeriod is a period between Retries

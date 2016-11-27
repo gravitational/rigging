@@ -38,14 +38,14 @@ import (
 	"k8s.io/client-go/1.4/rest"
 )
 
-type TransactionConfig struct {
+type ChangesetConfig struct {
 	// Client is k8s client
 	Client *kubernetes.Clientset
 	// Config is rest client config
 	Config *rest.Config
 }
 
-func (c *TransactionConfig) CheckAndSetDefaults() error {
+func (c *ChangesetConfig) CheckAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
@@ -55,7 +55,7 @@ func (c *TransactionConfig) CheckAndSetDefaults() error {
 	return nil
 }
 
-func NewTransaction(config TransactionConfig) (*Transaction, error) {
+func NewChangeset(config ChangesetConfig) (*Changeset, error) {
 	if err := config.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -66,55 +66,55 @@ func NewTransaction(config TransactionConfig) (*Transaction, error) {
 	}
 
 	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
-	cfg.GroupVersion = &unversioned.GroupVersion{Group: txGroup, Version: txVersion}
+	cfg.GroupVersion = &unversioned.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
 
 	clt, err := rest.RESTClientFor(&cfg)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return &Transaction{TransactionConfig: config, client: clt}, nil
+	return &Changeset{ChangesetConfig: config, client: clt}, nil
 }
 
-// Transaction is a is a collection transaction log that can rollback a series of
+// Changeset is a is a collection changeset log that can rollback a series of
 // changes to the system
-type Transaction struct {
-	TransactionConfig
+type Changeset struct {
+	ChangesetConfig
 	client *rest.RESTClient
 }
 
-type TransactionList struct {
+type ChangesetList struct {
 	unversioned.TypeMeta `json:",inline"`
 	// Standard list metadata
 	// More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
 	unversioned.ListMeta `json:"metadata,omitempty"`
 	// Items is a list of third party objects
-	Items []TransactionResource `json:"items"`
+	Items []ChangesetResource `json:"items"`
 }
 
-func (tr *TransactionList) GetObjectKind() unversioned.ObjectKind {
+func (tr *ChangesetList) GetObjectKind() unversioned.ObjectKind {
 	return &tr.TypeMeta
 }
 
-type TransactionResource struct {
+type ChangesetResource struct {
 	unversioned.TypeMeta `json:",inline"`
 	v1.ObjectMeta        `json:"metadata,omitempty"`
-	Spec                 TransactionSpec `json:"spec"`
+	Spec                 ChangesetSpec `json:"spec"`
 }
 
-func (tr *TransactionResource) GetObjectKind() unversioned.ObjectKind {
+func (tr *ChangesetResource) GetObjectKind() unversioned.ObjectKind {
 	return &tr.TypeMeta
 }
 
-func (tr *TransactionResource) String() string {
+func (tr *ChangesetResource) String() string {
 	return fmt.Sprintf("namespace=%v, name=%v, operations=%v)", tr.Namespace, tr.Name, len(tr.Spec.Items))
 }
 
-type TransactionSpec struct {
-	Status string            `json:"status"`
-	Items  []TransactionItem `json:"items"`
+type ChangesetSpec struct {
+	Status string          `json:"status"`
+	Items  []ChangesetItem `json:"items"`
 }
 
-type TransactionItem struct {
+type ChangesetItem struct {
 	From   string `json:"from"`
 	To     string `json:"to"`
 	Status string `json:"status"`
@@ -149,7 +149,7 @@ func (o *OperationInfo) String() string {
 }
 
 // GetOperationInfo returns operation information
-func GetOperationInfo(item TransactionItem) (*OperationInfo, error) {
+func GetOperationInfo(item ChangesetItem) (*OperationInfo, error) {
 	var info OperationInfo
 	if item.From != "" {
 		from, err := ParseResourceHeader(strings.NewReader(item.From))
@@ -168,95 +168,95 @@ func GetOperationInfo(item TransactionItem) (*OperationInfo, error) {
 	return &info, nil
 }
 
-func (tx *Transaction) status(ctx context.Context, data []byte) error {
+func (cs *Changeset) status(ctx context.Context, data []byte) error {
 	header, err := ParseResourceHeader(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	switch header.Kind {
 	case KindDaemonSet:
-		return tx.statusDaemonSet(ctx, data)
+		return cs.statusDaemonSet(ctx, data)
 	case KindReplicationController:
-		return tx.statusRC(ctx, data)
+		return cs.statusRC(ctx, data)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
 
-func (tx *Transaction) statusDaemonSet(ctx context.Context, data []byte) error {
-	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: tx.Client})
+func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
+	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return control.Status(ctx, 1, 0)
 }
 
-func (tx *Transaction) statusRC(ctx context.Context, data []byte) error {
-	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: tx.Client})
+func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
+	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return control.Status(ctx, 1, 0)
 }
 
-func (tx *Transaction) DeleteResource(ctx context.Context, transactionNamespace, transactionName string, resourceNamespace string, resource Ref, cascade bool) error {
-	if err := tx.Init(ctx); err != nil {
+func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, changesetName string, resourceNamespace string, resource Ref, cascade bool) error {
+	if err := cs.Init(ctx); err != nil {
 		return trace.Wrap(err)
 	}
-	tr, err := tx.createOrRead(&TransactionResource{
+	tr, err := cs.createOrRead(&ChangesetResource{
 		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindTransaction,
-			APIVersion: txAPIVersion,
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
 		},
 		ObjectMeta: v1.ObjectMeta{
-			Name: transactionName,
+			Name: changesetName,
 		},
-		Spec: TransactionSpec{
-			Status: txStatusInProgress,
+		Spec: ChangesetSpec{
+			Status: ChangesetStatusInProgress,
 		},
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status != txStatusInProgress {
-		return trace.CompareFailed("can't update transaction that is not in state '%v'", txStatusInProgress)
+	if tr.Spec.Status != ChangesetStatusInProgress {
+		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
 	}
 	g := log.WithFields(log.Fields{
-		"tx": tr.String(),
+		"cs": tr.String(),
 	})
 	g.Infof("deleting %v from %v", resource, resourceNamespace)
 	switch resource.Kind {
 	case KindDaemonSet:
-		return tx.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
+		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindReplicationController:
-		return tx.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
+		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
 }
 
-func (tx *Transaction) deleteDaemonSet(ctx context.Context, tr *TransactionResource, namespace, name string, cascade bool) error {
-	ds, err := tx.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
+func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: tx.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return tx.withDeleteOp(ctx, tr, ds, func() error {
+	return cs.withDeleteOp(ctx, tr, ds, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
 
-func (tx *Transaction) withDeleteOp(ctx context.Context, tr *TransactionResource, obj interface{}, fn func() error) error {
+func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj interface{}, fn func() error) error {
 	data, err := goyaml.Marshal(obj)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	tr.Spec.Items = append(tr.Spec.Items, TransactionItem{
+	tr.Spec.Items = append(tr.Spec.Items, ChangesetItem{
 		From:   string(data),
-		Status: opStatusCreated,
+		Status: OpStatusCreated,
 	})
-	tr, err = tx.update(tr)
+	tr, err = cs.update(tr)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -264,51 +264,51 @@ func (tx *Transaction) withDeleteOp(ctx context.Context, tr *TransactionResource
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	tr.Spec.Items[len(tr.Spec.Items)-1].Status = opStatusCompleted
-	_, err = tx.update(tr)
+	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
+	_, err = cs.update(tr)
 	return err
 }
 
-func (tx *Transaction) deleteRC(ctx context.Context, tr *TransactionResource, namespace, name string, cascade bool) error {
-	rc, err := tx.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
+func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: tx.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return tx.withDeleteOp(ctx, tr, rc, func() error {
+	return cs.withDeleteOp(ctx, tr, rc, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
 
-func (tx *Transaction) Commit(ctx context.Context, transactionNamespace, transactionName string) error {
-	tr, err := tx.get(transactionNamespace, transactionName)
+func (cs *Changeset) Freeze(ctx context.Context, changesetNamespace, changesetName string) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status != txStatusInProgress {
-		return trace.CompareFailed("transaction is not in progress")
+	if tr.Spec.Status != ChangesetStatusInProgress {
+		return trace.CompareFailed("changeset is not in progress")
 	}
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		item := &tr.Spec.Items[i]
-		if item.Status != opStatusCompleted {
+		if item.Status != OpStatusCompleted {
 			return trace.CompareFailed("operation %v is not completed", i)
 		}
 	}
-	tr.Spec.Status = txStatusCommited
-	_, err = tx.update(tr)
+	tr.Spec.Status = ChangesetStatusCommited
+	_, err = cs.update(tr)
 	return trace.Wrap(err)
 }
 
-func (tx *Transaction) Rollback(ctx context.Context, transactionNamespace, transactionName string) error {
-	tr, err := tx.get(transactionNamespace, transactionName)
+func (cs *Changeset) Rollback(ctx context.Context, changesetNamespace, changesetName string) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status == txStatusRolledBack {
-		return trace.CompareFailed("transaction is already rolled back")
+	if tr.Spec.Status == ChangesetStatusRolledBack {
+		return trace.CompareFailed("changeset is already rolled back")
 	}
 	g := log.WithFields(log.Fields{
 		"tx": tr.String(),
@@ -316,24 +316,24 @@ func (tx *Transaction) Rollback(ctx context.Context, transactionNamespace, trans
 	g.Infof("rollback")
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
-		if op.Status != opStatusCompleted {
-			g.Infof("skipping transaction item %v, status: %v is not %v", i, op.Status, opStatusCompleted)
+		if op.Status != OpStatusCompleted {
+			g.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
 		}
-		if err := tx.rollback(ctx, op); err != nil {
+		if err := cs.rollback(ctx, op); err != nil {
 			return trace.Wrap(err)
 		}
-		op.Status = opStatusRolledBack
-		tr, err = tx.update(tr)
+		op.Status = OpStatusRolledBack
+		tr, err = cs.update(tr)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
-	tr.Spec.Status = txStatusRolledBack
-	_, err = tx.update(tr)
+	tr.Spec.Status = ChangesetStatusRolledBack
+	_, err = cs.update(tr)
 	return trace.Wrap(err)
 }
 
-func (tx *Transaction) rollback(ctx context.Context, item *TransactionItem) error {
+func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
 	info, err := GetOperationInfo(*item)
 	if err != nil {
 		if err != nil {
@@ -343,54 +343,54 @@ func (tx *Transaction) rollback(ctx context.Context, item *TransactionItem) erro
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
-		return tx.rollbackDaemonSet(ctx, item)
+		return cs.rollbackDaemonSet(ctx, item)
 	case KindReplicationController:
-		return tx.rollbackRC(ctx, item)
+		return cs.rollbackRC(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
 
-func (tx *Transaction) rollbackDaemonSet(ctx context.Context, item *TransactionItem) error {
+func (cs *Changeset) rollbackDaemonSet(ctx context.Context, item *ChangesetItem) error {
 	// this operation created daemon set, so we will delete it
 	if len(item.From) == 0 {
-		control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.To), Client: tx.Client})
+		control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
 		return control.Delete(ctx, true)
 	}
 	// this operation either created or updated daemon set, so we create a new version
-	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: tx.Client})
+	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return control.Upsert(ctx)
 }
 
-func (tx *Transaction) rollbackRC(ctx context.Context, item *TransactionItem) error {
+func (cs *Changeset) rollbackRC(ctx context.Context, item *ChangesetItem) error {
 	// this operation created RC, so we will delete it
 	if len(item.From) == 0 {
-		control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.To), Client: tx.Client})
+		control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
 		return control.Delete(ctx, true)
 	}
 	// this operation either created or updated RC, so we create a new version
-	control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.From), Client: tx.Client})
+	control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return control.Upsert(ctx)
 }
 
-func (tx *Transaction) Status(ctx context.Context, transactionNamespace, transactionName string, retryAttempts int, retryPeriod time.Duration) error {
-	tr, err := tx.get(transactionNamespace, transactionName)
+func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetName string, retryAttempts int, retryPeriod time.Duration) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status == txStatusRolledBack {
-		return trace.CompareFailed("transaction has been rolled back")
+	if tr.Spec.Status == ChangesetStatusRolledBack {
+		return trace.CompareFailed("changeset has been rolled back")
 	}
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
@@ -401,14 +401,14 @@ func (tx *Transaction) Status(ctx context.Context, transactionNamespace, transac
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
 		for i, op := range tr.Spec.Items {
 			switch op.Status {
-			case opStatusRolledBack:
+			case OpStatusRolledBack:
 				log.Infof("%v is rolled back, skip status check", i)
 				continue
-			case opStatusCreated:
+			case OpStatusCreated:
 				return trace.BadParameter("%v is not completed yet", tr)
-			case opStatusCompleted:
+			case OpStatusCompleted:
 				if op.To != "" {
-					if err := tx.status(ctx, []byte(op.To)); err != nil {
+					if err := cs.status(ctx, []byte(op.To)); err != nil {
 						return trace.Wrap(err)
 					}
 				} else {
@@ -422,24 +422,24 @@ func (tx *Transaction) Status(ctx context.Context, transactionNamespace, transac
 	})
 }
 
-func (tx *Transaction) Upsert(ctx context.Context, transactionNamespace, transactionName string, data []byte) error {
-	tr, err := tx.createOrRead(&TransactionResource{
+func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
+	tr, err := cs.createOrRead(&ChangesetResource{
 		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindTransaction,
-			APIVersion: txAPIVersion,
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
 		},
 		ObjectMeta: v1.ObjectMeta{
-			Name: transactionName,
+			Name: changesetName,
 		},
-		Spec: TransactionSpec{
-			Status: txStatusInProgress,
+		Spec: ChangesetSpec{
+			Status: ChangesetStatusInProgress,
 		},
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status != txStatusInProgress {
-		return trace.CompareFailed("can't update transaction that is not in state '%v'", txStatusInProgress)
+	if tr.Spec.Status != ChangesetStatusInProgress {
+		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
 	}
 	var kind unversioned.TypeMeta
 	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
@@ -448,16 +448,16 @@ func (tx *Transaction) Upsert(ctx context.Context, transactionNamespace, transac
 	}
 	switch kind.Kind {
 	case KindDaemonSet:
-		_, err = tx.upsertDaemonSet(ctx, tr, data)
+		_, err = cs.upsertDaemonSet(ctx, tr, data)
 		return err
 	case KindReplicationController:
-		_, err = tx.upsertRC(ctx, tr, data)
+		_, err = cs.upsertRC(ctx, tr, data)
 		return err
 	}
 	return trace.BadParameter("unsupported resource type %v", kind.Kind)
 }
 
-func (tx *Transaction) withUpsertOp(ctx context.Context, tr *TransactionResource, old, new interface{}, fn func() error) (*TransactionResource, error) {
+func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old, new interface{}, fn func() error) (*ChangesetResource, error) {
 	var from []byte
 	var err error
 	if old != nil {
@@ -471,36 +471,36 @@ func (tx *Transaction) withUpsertOp(ctx context.Context, tr *TransactionResource
 		return nil, trace.Wrap(err)
 	}
 
-	tr.Spec.Items = append(tr.Spec.Items, TransactionItem{
+	tr.Spec.Items = append(tr.Spec.Items, ChangesetItem{
 		From:   string(from),
 		To:     string(to),
-		Status: opStatusCreated,
+		Status: OpStatusCreated,
 	})
 
-	tr, err = tx.update(tr)
+	tr, err = cs.update(tr)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if err := fn(); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	tr.Spec.Items[len(tr.Spec.Items)-1].Status = opStatusCompleted
-	return tx.update(tr)
+	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
+	return cs.update(tr)
 }
 
-func (tx *Transaction) upsertDaemonSet(ctx context.Context, tr *TransactionResource, data []byte) (*TransactionResource, error) {
+func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
 	ds := v1beta1.DaemonSet{}
 	err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&ds)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	g := log.WithFields(log.Fields{
-		"tx": tr.String(),
+		"cs": tr.String(),
 		"ds": fmt.Sprintf("%v/%v", ds.Namespace, ds.Name),
 	})
 	g.Infof("upsert")
 	// 1. find current daemon set if it exists
-	daemons := tx.Client.Extensions().DaemonSets(ds.Namespace)
+	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -508,58 +508,57 @@ func (tx *Transaction) upsertDaemonSet(ctx context.Context, tr *TransactionResou
 		}
 		g.Infof("existing daemonset is not found")
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: &ds, Client: tx.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: &ds, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return tx.withUpsertOp(ctx, tr, currentDS, ds, func() error {
+	return cs.withUpsertOp(ctx, tr, currentDS, ds, func() error {
 		return control.Upsert(ctx)
 	})
 }
 
-func (tx *Transaction) upsertRC(ctx context.Context, tr *TransactionResource, data []byte) (*TransactionResource, error) {
+func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
 	rc := v1.ReplicationController{}
 	err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&rc)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	g := log.WithFields(log.Fields{
-		"tx": tr.String(),
+		"cs": tr.String(),
 		"rc": fmt.Sprintf("%v/%v", rc.Namespace, rc.Name),
 	})
 	g.Infof("upsert")
-	// 1. find current daemon set if it exists
-	rcs := tx.Client.Core().ReplicationControllers(rc.Namespace)
+	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
 	currentRC, err := rcs.Get(rc.Name)
 	err = convertErr(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing daemonset is not found")
+		g.Infof("existing RC not found")
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: &rc, Client: tx.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: &rc, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return tx.withUpsertOp(ctx, tr, currentRC, rc, func() error {
+	return cs.withUpsertOp(ctx, tr, currentRC, rc, func() error {
 		return control.Upsert(ctx)
 	})
 }
 
-func (tx *Transaction) Init(ctx context.Context) error {
-	log.Infof("Transaction init")
+func (cs *Changeset) Init(ctx context.Context) error {
+	log.Infof("Changeset init")
 	tpr := &v1beta1.ThirdPartyResource{
 		ObjectMeta: v1.ObjectMeta{
-			Name: txResourceName,
+			Name: ChangesetResourceName,
 		},
 		Versions: []v1beta1.APIVersion{
-			{Name: txVersion},
+			{Name: ChangesetVersion},
 		},
-		Description: "Update transactions",
+		Description: "Changeset",
 	}
-	_, err := tx.Client.Extensions().ThirdPartyResources().Create(tpr)
+	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
 	err = convertErr(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {
@@ -568,92 +567,92 @@ func (tx *Transaction) Init(ctx context.Context) error {
 	}
 	// wait for the controller to init by trying to list stuff
 	return retry(ctx, 30, time.Second, func() error {
-		_, err := tx.list("default")
+		_, err := cs.list(DefaultNamespace)
 		return err
 	})
 }
 
-func (tx *Transaction) Get(ctx context.Context, namespace, name string) (*TransactionResource, error) {
-	if err := tx.Init(ctx); err != nil {
+func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
+	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return tx.get(namespace, name)
+	return cs.get(namespace, name)
 }
 
-func (tx *Transaction) List(ctx context.Context, namespace string) (*TransactionList, error) {
-	if err := tx.Init(ctx); err != nil {
+func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList, error) {
+	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return tx.list(namespace)
+	return cs.list(namespace)
 }
 
-func (tx *Transaction) upsert(tr *TransactionResource) (*TransactionResource, error) {
-	out, err := tx.create(tr)
+func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
+	out, err := cs.create(tr)
 	if err == nil {
 		return out, nil
 	}
 	if !trace.IsAlreadyExists(err) {
 		return nil, err
 	}
-	return tx.update(tr)
+	return cs.update(tr)
 }
 
-func (tx *Transaction) create(tr *TransactionResource) (*TransactionResource, error) {
+func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 	tr.Namespace = Namespace(tr.Namespace)
 	data, err := json.Marshal(tr)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	var raw runtime.Unknown
-	err = tx.client.Post().
-		SubResource("namespaces", tr.Namespace, txCollection).
+	err = cs.client.Post().
+		SubResource("namespaces", tr.Namespace, ChangesetCollection).
 		Body(data).
 		Do().
 		Into(&raw)
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	var result TransactionResource
+	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &result, nil
 }
 
-func (tx *Transaction) get(namespace, name string) (*TransactionResource, error) {
+func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 	var raw runtime.Unknown
-	err := tx.client.Get().
-		SubResource("namespaces", namespace, txCollection, name).
+	err := cs.client.Get().
+		SubResource("namespaces", namespace, ChangesetCollection, name).
 		Do().
 		Into(&raw)
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	var result TransactionResource
+	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &result, nil
 }
 
-func (tx *Transaction) createOrRead(tr *TransactionResource) (*TransactionResource, error) {
-	out, err := tx.create(tr)
+func (cs *Changeset) createOrRead(tr *ChangesetResource) (*ChangesetResource, error) {
+	out, err := cs.create(tr)
 	if err == nil {
 		return out, nil
 	}
 	if !trace.IsAlreadyExists(err) {
 		return nil, trace.Wrap(err)
 	}
-	return tx.get(tr.Namespace, tr.Name)
+	return cs.get(tr.Namespace, tr.Name)
 }
 
-func (tx *Transaction) Delete(ctx context.Context, namespace, name string) error {
-	if err := tx.Init(ctx); err != nil {
+func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
+	if err := cs.Init(ctx); err != nil {
 		return trace.Wrap(err)
 	}
 	var raw runtime.Unknown
-	err := tx.client.Delete().
-		SubResource("namespaces", namespace, txCollection, name).
+	err := cs.client.Delete().
+		SubResource("namespaces", namespace, ChangesetCollection, name).
 		Do().
 		Into(&raw)
 	if err != nil {
@@ -662,38 +661,38 @@ func (tx *Transaction) Delete(ctx context.Context, namespace, name string) error
 	return nil
 }
 
-func (tx *Transaction) update(tr *TransactionResource) (*TransactionResource, error) {
+func (cs *Changeset) update(tr *ChangesetResource) (*ChangesetResource, error) {
 	tr.Namespace = Namespace(tr.Namespace)
 	data, err := json.Marshal(tr)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	var raw runtime.Unknown
-	err = tx.client.Put().
-		SubResource("namespaces", tr.Namespace, txCollection, tr.Name).
+	err = cs.client.Put().
+		SubResource("namespaces", tr.Namespace, ChangesetCollection, tr.Name).
 		Body(data).
 		Do().
 		Into(&raw)
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	var result TransactionResource
+	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &result, nil
 }
 
-func (tx *Transaction) list(namespace string) (*TransactionList, error) {
+func (cs *Changeset) list(namespace string) (*ChangesetList, error) {
 	var raw runtime.Unknown
-	err := tx.client.Get().
-		SubResource("namespaces", namespace, txCollection).
+	err := cs.client.Get().
+		SubResource("namespaces", namespace, ChangesetCollection).
 		Do().
 		Into(&raw)
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	var result TransactionList
+	var result ChangesetList
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
 		return nil, trace.Wrap(err)
 	}

@@ -98,7 +98,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 	c.Infof("collectPods(%v) -> %v", set, len(podList.Items))
 	currentPods := make([]v1.Pod, 0)
 	for _, pod := range podList.Items {
-		createdBy, ok := pod.Annotations[annotationCreatedBy]
+		createdBy, ok := pod.Annotations[AnnotationCreatedBy]
 		if !ok {
 			continue
 		}

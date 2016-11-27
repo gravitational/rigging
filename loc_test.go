@@ -20,19 +20,19 @@ func (s *LocSuite) TestParseRef(c *C) {
 	}{
 		{
 			input: "tx1",
-			ref:   Ref{Kind: kindTransaction, Name: "tx1"},
+			ref:   Ref{Kind: KindChangeset, Name: "tx1"},
 		},
 		{
 			input: "ds/ds1",
-			ref:   Ref{Kind: kindDaemonSet, Name: "ds1"},
+			ref:   Ref{Kind: KindDaemonSet, Name: "ds1"},
 		},
 		{
 			input: "ds ds1",
-			ref:   Ref{Kind: kindDaemonSet, Name: "ds1"},
+			ref:   Ref{Kind: KindDaemonSet, Name: "ds1"},
 		},
 		{
 			input: "daemonsets/ds1",
-			ref:   Ref{Kind: kindDaemonSet, Name: "ds1"},
+			ref:   Ref{Kind: KindDaemonSet, Name: "ds1"},
 		},
 	}
 	for i, tc := range tcs {

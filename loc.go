@@ -16,8 +16,8 @@ func ParseShortcut(in, defaultVal string) (string, error) {
 		return KindConfigMap, nil
 	case "daemonsets", "ds":
 		return KindDaemonSet, nil
-	case "transactions", "tx":
-		return KindTransaction, nil
+	case "changesets", "cs":
+		return KindChangeset, nil
 	case "deployments":
 		return KindDeployment, nil
 	case "jobs":
@@ -42,9 +42,9 @@ func ParseRef(ref string) (*Ref, error) {
 	parts := strings.FieldsFunc(ref, isDelimiter)
 	switch len(parts) {
 	case 1:
-		return &Ref{Kind: KindTransaction, Name: parts[0]}, nil
+		return &Ref{Kind: KindChangeset, Name: parts[0]}, nil
 	case 2:
-		shortcut, err := ParseShortcut(parts[0], KindTransaction)
+		shortcut, err := ParseShortcut(parts[0], KindChangeset)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
