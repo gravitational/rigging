@@ -76,3 +76,16 @@ func ParseReplicationController(r io.Reader) (*v1.ReplicationController, error) 
 	}
 	return &rc, nil
 }
+
+// ParseDeployment parses deployment
+func ParseDeployment(r io.Reader) (*v1beta1.Deployment, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	rc := v1beta1.Deployment{}
+	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&rc)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &rc, nil
+}
