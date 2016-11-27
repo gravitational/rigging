@@ -28,14 +28,6 @@ import (
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.4/pkg/labels"
-	"k8s.io/client-go/1.4/pkg/util/yaml"
-)
-
-const (
-	// DefaultRetryAttempts specifies amount of retry attempts for checks
-	DefaultRetryAttempts = 60
-	// RetryPeriod is a period between Retries
-	DefaultRetryPeriod = time.Second
 )
 
 // NewDSControl returns new instance of DaemonSet updater
@@ -53,6 +45,8 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 			return nil, trace.Wrap(err)
 		}
 	}
+	// sometimes existing objects pulled from the API don't have type set
+	ds.Kind = KindDaemonSet
 	return &DSControl{
 		DSConfig:  config,
 		daemonSet: *ds,
@@ -60,30 +54,6 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 			"ds": fmt.Sprintf("%v/%v", Namespace(ds.Namespace), ds.Name),
 		}),
 	}, nil
-}
-
-// ParseDaemonSet parses daemon set from reader
-func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
-	if r == nil {
-		return nil, trace.BadParameter("missing reader")
-	}
-	ds := v1beta1.DaemonSet{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ds)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &ds, nil
-}
-
-// ParseSerializedReference parses serialized reference object
-// used in annotations
-func ParseSerializedReference(r io.Reader) (*api.SerializedReference, error) {
-	ref := api.SerializedReference{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ref)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &ref, nil
 }
 
 // DSConfig is a DaemonSet control configuration
@@ -94,10 +64,6 @@ type DSConfig struct {
 	DaemonSet *v1beta1.DaemonSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
-	// RetryAttempts specifies amount of retry attempts for checks
-	RetryAttempts int
-	// RetryPeriod is a period between Retries
-	RetryPeriod time.Duration
 }
 
 func (c *DSConfig) CheckAndSetDefaults() error {
@@ -122,7 +88,7 @@ type DSControl struct {
 func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	if c.daemonSet.Spec.Selector != nil {
-		for key, val := range c.daemonSet.Spec.Template.Labels {
+		for key, val := range c.daemonSet.Spec.Selector.MatchLabels {
 			set[key] = val
 		}
 	}
@@ -211,7 +177,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
 	var currentPods map[string]v1.Pod
 	if currentDS != nil {
-		c.Infof("currentDS: %v", currentDS)
+		c.Infof("currentDS: %v", currentDS.UID)
 		currentPods, err = c.collectPods(currentDS)
 		if err != nil {
 			return trace.Wrap(err)

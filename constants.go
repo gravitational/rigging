@@ -1,5 +1,9 @@
 package rigging
 
+import (
+	"time"
+)
+
 const (
 	txResourceName            = "transaction.tx.gravitational.io"
 	txGroup                   = "tx.gravitational.io"
@@ -23,6 +27,10 @@ const (
 	txStatusRolledBack        = "rolledback"
 	txStatusInProgress        = "in-progress"
 	txStatusCommited          = "commited"
+	// DefaultRetryAttempts specifies amount of retry attempts for checks
+	DefaultRetryAttempts = 60
+	// RetryPeriod is a period between Retries
+	DefaultRetryPeriod = time.Second
 )
 
 // Namespace sets default namespace if in is empty

@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -74,11 +73,6 @@ func NewTransaction(config TransactionConfig) (*Transaction, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &Transaction{TransactionConfig: config, client: clt}, nil
-}
-
-type ResourceHeader struct {
-	unversioned.TypeMeta `json:",inline"`
-	v1.ObjectMeta        `json:"metadata,omitempty"`
 }
 
 // Transaction is a is a collection transaction log that can rollback a series of
@@ -154,16 +148,6 @@ func (o *OperationInfo) String() string {
 	return "unknown operation"
 }
 
-// ParseResourceHeader parses resource header information
-func ParseResourceHeader(reader io.Reader) (*ResourceHeader, error) {
-	var out ResourceHeader
-	err := yaml.NewYAMLOrJSONDecoder(reader, 1024).Decode(&out)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &out, nil
-}
-
 // GetOperationInfo returns operation information
 func GetOperationInfo(item TransactionItem) (*OperationInfo, error) {
 	var info OperationInfo
@@ -192,12 +176,22 @@ func (tx *Transaction) status(ctx context.Context, data []byte) error {
 	switch header.Kind {
 	case KindDaemonSet:
 		return tx.statusDaemonSet(ctx, data)
+	case KindReplicationController:
+		return tx.statusRC(ctx, data)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
 
 func (tx *Transaction) statusDaemonSet(ctx context.Context, data []byte) error {
 	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: tx.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status(ctx, 1, 0)
+}
+
+func (tx *Transaction) statusRC(ctx context.Context, data []byte) error {
+	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: tx.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -233,6 +227,8 @@ func (tx *Transaction) DeleteResource(ctx context.Context, transactionNamespace,
 	switch resource.Kind {
 	case KindDaemonSet:
 		return tx.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindReplicationController:
+		return tx.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
 }
@@ -242,12 +238,17 @@ func (tx *Transaction) deleteDaemonSet(ctx context.Context, tr *TransactionResou
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	ds.Kind = KindDaemonSet
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: tx.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	data, err := goyaml.Marshal(ds)
+	return tx.withDeleteOp(ctx, tr, ds, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (tx *Transaction) withDeleteOp(ctx context.Context, tr *TransactionResource, obj interface{}, fn func() error) error {
+	data, err := goyaml.Marshal(obj)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -259,13 +260,27 @@ func (tx *Transaction) deleteDaemonSet(ctx context.Context, tr *TransactionResou
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = control.Delete(ctx, cascade)
+	err = fn()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	tr.Spec.Items[len(tr.Spec.Items)-1].Status = opStatusCompleted
 	_, err = tx.update(tr)
 	return err
+}
+
+func (tx *Transaction) deleteRC(ctx context.Context, tr *TransactionResource, namespace, name string, cascade bool) error {
+	rc, err := tx.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: tx.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return tx.withDeleteOp(ctx, tr, rc, func() error {
+		return control.Delete(ctx, cascade)
+	})
 }
 
 func (tx *Transaction) Commit(ctx context.Context, transactionNamespace, transactionName string) error {
@@ -329,6 +344,8 @@ func (tx *Transaction) rollback(ctx context.Context, item *TransactionItem) erro
 	switch info.Kind() {
 	case KindDaemonSet:
 		return tx.rollbackDaemonSet(ctx, item)
+	case KindReplicationController:
+		return tx.rollbackRC(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -344,6 +361,23 @@ func (tx *Transaction) rollbackDaemonSet(ctx context.Context, item *TransactionI
 	}
 	// this operation either created or updated daemon set, so we create a new version
 	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: tx.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (tx *Transaction) rollbackRC(ctx context.Context, item *TransactionItem) error {
+	// this operation created RC, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.To), Client: tx.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+	// this operation either created or updated RC, so we create a new version
+	control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.From), Client: tx.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -416,8 +450,42 @@ func (tx *Transaction) Upsert(ctx context.Context, transactionNamespace, transac
 	case KindDaemonSet:
 		_, err = tx.upsertDaemonSet(ctx, tr, data)
 		return err
+	case KindReplicationController:
+		_, err = tx.upsertRC(ctx, tr, data)
+		return err
 	}
 	return trace.BadParameter("unsupported resource type %v", kind.Kind)
+}
+
+func (tx *Transaction) withUpsertOp(ctx context.Context, tr *TransactionResource, old, new interface{}, fn func() error) (*TransactionResource, error) {
+	var from []byte
+	var err error
+	if old != nil {
+		from, err = goyaml.Marshal(old)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+	to, err := goyaml.Marshal(new)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	tr.Spec.Items = append(tr.Spec.Items, TransactionItem{
+		From:   string(from),
+		To:     string(to),
+		Status: opStatusCreated,
+	})
+
+	tr, err = tx.update(tr)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if err := fn(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	tr.Spec.Items[len(tr.Spec.Items)-1].Status = opStatusCompleted
+	return tx.update(tr)
 }
 
 func (tx *Transaction) upsertDaemonSet(ctx context.Context, tr *TransactionResource, data []byte) (*TransactionResource, error) {
@@ -440,35 +508,44 @@ func (tx *Transaction) upsertDaemonSet(ctx context.Context, tr *TransactionResou
 		}
 		g.Infof("existing daemonset is not found")
 	}
-
-	var from []byte
-	if currentDS != nil {
-		from, err = goyaml.Marshal(currentDS)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
-
-	tr.Spec.Items = append(tr.Spec.Items, TransactionItem{
-		From:   string(from),
-		To:     string(data),
-		Status: opStatusCreated,
-	})
-
-	tr, err = tx.update(tr)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
 	control, err := NewDSControl(DSConfig{DaemonSet: &ds, Client: tx.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	if err := control.Upsert(ctx); err != nil {
+
+	return tx.withUpsertOp(ctx, tr, currentDS, ds, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (tx *Transaction) upsertRC(ctx context.Context, tr *TransactionResource, data []byte) (*TransactionResource, error) {
+	rc := v1.ReplicationController{}
+	err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&rc)
+	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	tr.Spec.Items[len(tr.Spec.Items)-1].Status = opStatusCompleted
-	return tx.update(tr)
+	g := log.WithFields(log.Fields{
+		"tx": tr.String(),
+		"rc": fmt.Sprintf("%v/%v", rc.Namespace, rc.Name),
+	})
+	g.Infof("upsert")
+	// 1. find current daemon set if it exists
+	rcs := tx.Client.Core().ReplicationControllers(rc.Namespace)
+	currentRC, err := rcs.Get(rc.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Infof("existing daemonset is not found")
+	}
+	control, err := NewRCControl(RCConfig{ReplicationController: &rc, Client: tx.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return tx.withUpsertOp(ctx, tr, currentRC, rc, func() error {
+		return control.Upsert(ctx)
+	})
 }
 
 func (tx *Transaction) Init(ctx context.Context) error {
