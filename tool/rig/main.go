@@ -60,8 +60,8 @@ func run() error {
 		ctrDelete          = ctr.Command("delete", "Delete a changeset by name")
 		ctrDeleteChangeset = Ref(ctrDelete.Arg("changeset", "Changeset name").Required())
 
-		crollback          = app.Command("rollback", "Rollback the changeset")
-		crollbackChangeset = Ref(crollback.Arg("changeset", "name of the changeset").Required())
+		crevert          = app.Command("revert", "Revert the changeset")
+		crevertChangeset = Ref(crevert.Arg("changeset", "name of the changeset").Required())
 
 		cfreeze          = app.Command("freeze", "Freeze the changeset")
 		cfreezeChangeset = Ref(cfreeze.Arg("changeset", "name of the changeset").Required())
@@ -110,8 +110,8 @@ func run() error {
 		return deleteResource(ctx, client, config, *namespace, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade)
 	case ctrDelete.FullCommand():
 		return csDelete(ctx, client, config, *namespace, *ctrDeleteChangeset)
-	case crollback.FullCommand():
-		return rollback(ctx, client, config, *namespace, *crollbackChangeset)
+	case crevert.FullCommand():
+		return revert(ctx, client, config, *namespace, *crevertChangeset)
 	case cfreeze.FullCommand():
 		return freeze(ctx, client, config, *namespace, *cfreezeChangeset)
 	}
@@ -147,7 +147,7 @@ func Ref(s kingpin.Settings) *rigging.Ref {
 	return r
 }
 
-func rollback(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref) error {
+func revert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
@@ -158,11 +158,11 @@ func rollback(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.Rollback(ctx, namespace, changeset.Name)
+	err = cs.Revert(ctx, namespace, changeset.Name)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("changeset %v rolled back \n", changeset.Name)
+	fmt.Printf("changeset %v reverted \n", changeset.Name)
 	return nil
 }
 
@@ -347,7 +347,7 @@ func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("%v has been removed\n", tr.Name)
+	fmt.Printf("%v has been deleted\n", tr.Name)
 	return nil
 }
 

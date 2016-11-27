@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -114,6 +115,9 @@ func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetNa
 	case KindReplicationController:
 		_, err = cs.upsertRC(ctx, tr, data)
 		return err
+	case KindDeployment:
+		_, err = cs.upsertDeployment(ctx, tr, data)
+		return err
 	}
 	return trace.BadParameter("unsupported resource type %v", kind.Kind)
 }
@@ -124,8 +128,8 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status == ChangesetStatusRolledBack {
-		return trace.CompareFailed("changeset has been rolled back")
+	if tr.Spec.Status == ChangesetStatusReverted {
+		return trace.CompareFailed("changeset has been reverted")
 	}
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
@@ -136,7 +140,7 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
 		for i, op := range tr.Spec.Items {
 			switch op.Status {
-			case OpStatusRolledBack:
+			case OpStatusReverted:
 				log.Infof("%v is rolled back, skip status check", i)
 				continue
 			case OpStatusCreated:
@@ -189,6 +193,8 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindReplicationController:
 		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindDeployment:
+		return cs.deleteDeployment(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
 }
@@ -213,19 +219,19 @@ func (cs *Changeset) Freeze(ctx context.Context, changesetNamespace, changesetNa
 	return trace.Wrap(err)
 }
 
-// Rollback rolls back all the operations in reverse order they were applied
-func (cs *Changeset) Rollback(ctx context.Context, changesetNamespace, changesetName string) error {
+// Revert rolls back all the operations in reverse order they were applied
+func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetName string) error {
 	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status == ChangesetStatusRolledBack {
-		return trace.CompareFailed("changeset is already rolled back")
+	if tr.Spec.Status == ChangesetStatusReverted {
+		return trace.CompareFailed("changeset is already reverted")
 	}
 	g := log.WithFields(log.Fields{
 		"tx": tr.String(),
 	})
-	g.Infof("rollback")
+	g.Infof("roverting")
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
 		if op.Status != OpStatusCompleted {
@@ -234,13 +240,13 @@ func (cs *Changeset) Rollback(ctx context.Context, changesetNamespace, changeset
 		if err := cs.rollback(ctx, op); err != nil {
 			return trace.Wrap(err)
 		}
-		op.Status = OpStatusRolledBack
+		op.Status = OpStatusReverted
 		tr, err = cs.update(tr)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
-	tr.Spec.Status = ChangesetStatusRolledBack
+	tr.Spec.Status = ChangesetStatusReverted
 	_, err = cs.update(tr)
 	return trace.Wrap(err)
 }
@@ -255,6 +261,8 @@ func (cs *Changeset) status(ctx context.Context, data []byte) error {
 		return cs.statusDaemonSet(ctx, data)
 	case KindReplicationController:
 		return cs.statusRC(ctx, data)
+	case KindDeployment:
+		return cs.statusDeployment(ctx, data)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -269,6 +277,14 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
 
 func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
 	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status(ctx, 1, 0)
+}
+
+func (cs *Changeset) statusDeployment(ctx context.Context, data []byte) error {
+	control, err := NewDeploymentControl(DeploymentConfig{Reader: bytes.NewReader(data), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -325,6 +341,20 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 	})
 }
 
+func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, deployment, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
 	info, err := GetOperationInfo(*item)
 	if err != nil {
@@ -338,6 +368,8 @@ func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
 		return cs.rollbackDaemonSet(ctx, item)
 	case KindReplicationController:
 		return cs.rollbackRC(ctx, item)
+	case KindDeployment:
+		return cs.rollbackDeployment(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -376,26 +408,40 @@ func (cs *Changeset) rollbackRC(ctx context.Context, item *ChangesetItem) error 
 	return control.Upsert(ctx)
 }
 
-func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old, new interface{}, fn func() error) (*ChangesetResource, error) {
-	var from []byte
-	var err error
-	if old != nil {
-		from, err = goyaml.Marshal(old)
+func (cs *Changeset) rollbackDeployment(ctx context.Context, item *ChangesetItem) error {
+	// this operation created Deployment, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewDeploymentControl(DeploymentConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
 		if err != nil {
-			return nil, trace.Wrap(err)
+			return trace.Wrap(err)
 		}
+		return control.Delete(ctx, true)
 	}
+	// this operation either created or updated Deployment, so we create a new version
+	control, err := NewDeploymentControl(DeploymentConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old interface{}, new interface{}, fn func() error) (*ChangesetResource, error) {
 	to, err := goyaml.Marshal(new)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
-	tr.Spec.Items = append(tr.Spec.Items, ChangesetItem{
-		From:   string(from),
+	item := ChangesetItem{
 		To:     string(to),
 		Status: OpStatusCreated,
-	})
-
+	}
+	if !reflect.ValueOf(old).IsNil() {
+		from, err := goyaml.Marshal(old)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		item.From = string(from)
+	}
+	tr.Spec.Items = append(tr.Spec.Items, item)
 	tr, err = cs.update(tr)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -408,8 +454,7 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 }
 
 func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
-	ds := v1beta1.DaemonSet{}
-	err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&ds)
+	ds, err := ParseDaemonSet(bytes.NewReader(data))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -418,7 +463,6 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		"ds": fmt.Sprintf("%v/%v", ds.Namespace, ds.Name),
 	})
 	g.Infof("upsert")
-	// 1. find current daemon set if it exists
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
 	if err != nil {
@@ -426,20 +470,19 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 			return nil, trace.Wrap(err)
 		}
 		g.Infof("existing daemonset is not found")
+		currentDS = nil
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: &ds, Client: cs.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	return cs.withUpsertOp(ctx, tr, currentDS, ds, func() error {
 		return control.Upsert(ctx)
 	})
 }
 
 func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
-	rc := v1.ReplicationController{}
-	err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&rc)
+	rc, err := ParseReplicationController(bytes.NewReader(data))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -456,12 +499,42 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 			return nil, trace.Wrap(err)
 		}
 		g.Infof("existing RC not found")
+		currentRC = nil
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: &rc, Client: cs.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return cs.withUpsertOp(ctx, tr, currentRC, rc, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	deployment, err := ParseDeployment(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	g := log.WithFields(log.Fields{
+		"cs":         tr.String(),
+		"deployment": fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name),
+	})
+	g.Infof("upsert")
+	deployments := cs.Client.Extensions().Deployments(deployment.Namespace)
+	currentDeployment, err := deployments.Get(deployment.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Infof("existing Deployment not found")
+		currentDeployment = nil
+	}
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentDeployment, deployment, func() error {
 		return control.Upsert(ctx)
 	})
 }

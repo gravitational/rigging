@@ -23,8 +23,8 @@ const (
 	AnnotationCreatedBy       = "kubernetes.io/created-by"
 	OpStatusCreated           = "created"
 	OpStatusCompleted         = "completed"
-	OpStatusRolledBack        = "rolled-back"
-	ChangesetStatusRolledBack = "rolled-back"
+	OpStatusReverted          = "reverted"
+	ChangesetStatusReverted   = "reverted"
 	ChangesetStatusInProgress = "in-progress"
 	ChangesetStatusCommited   = "commited"
 	// DefaultRetryAttempts specifies amount of retry attempts for checks

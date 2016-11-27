@@ -18,14 +18,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
 	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.4/pkg/labels"
 )
@@ -50,7 +47,7 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 		DeploymentConfig: config,
 		deployment:       *rc,
 		Entry: log.WithFields(log.Fields{
-			"rc": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+			"deployment": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
 		}),
 	}, nil
 }
@@ -83,42 +80,6 @@ type DeploymentControl struct {
 	*log.Entry
 }
 
-// collectPods returns pods created by this RC
-func (c *DeploymentControl) collectPods(deployment *v1beta1.Deployment) ([]v1.Pod, error) {
-	set := make(labels.Set)
-	if c.deployment.Spec.Selector != nil {
-		for key, val := range c.deployment.Spec.Selector.MatchLabels {
-			set[key] = val
-		}
-	}
-	pods := c.Client.Core().Pods(deployment.Namespace)
-	podList, err := pods.List(api.ListOptions{
-		LabelSelector: set.AsSelector(),
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	c.Infof("collectPods(%v) -> %v", set, len(podList.Items))
-	currentPods := make([]v1.Pod, 0)
-	for _, pod := range podList.Items {
-		createdBy, ok := pod.Annotations[AnnotationCreatedBy]
-		if !ok {
-			continue
-		}
-		ref, err := ParseSerializedReference(strings.NewReader(createdBy))
-		if err != nil {
-			log.Warningf(trace.DebugReport(err))
-			continue
-		}
-		c.Infof("collectPods(%v, %v, %v)", ref.Reference.Kind, ref.Reference.UID, deployment.UID)
-		if ref.Reference.Kind == KindDeployment && ref.Reference.UID == deployment.UID {
-			currentPods = append(currentPods, pod)
-			c.Infof("found pod created by this RC: %v", pod.Name)
-		}
-	}
-	return currentPods, nil
-}
-
 func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("Delete")
 	rcs := c.Client.Extensions().Deployments(c.deployment.Namespace)
@@ -126,25 +87,18 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	pods := c.Client.Core().Pods(c.deployment.Namespace)
-	currentPods, err := c.collectPods(currentDeployment)
-	if err != nil {
-		return trace.Wrap(err)
+	if cascade {
+		// scale deployment down to delete all replicas and pods
+		var replicas int32
+		currentDeployment.Spec.Replicas = &replicas
+		currentDeployment, err = rcs.Update(currentDeployment)
+		if err != nil {
+			return convertErr(err)
+		}
 	}
-	c.Infof("deleting")
 	err = rcs.Delete(c.deployment.Name, nil)
 	if err != nil {
 		return trace.Wrap(err)
-	}
-	if !cascade {
-		c.Infof("cascade not set, returning")
-	}
-	c.Infof("deleting pods %v", len(currentPods))
-	for _, pod := range currentPods {
-		log.Infof("deleting pod %v", pod.Name)
-		if err := pods.Delete(pod.Name, nil); err != nil {
-			return trace.Wrap(err)
-		}
 	}
 	return nil
 }
@@ -196,16 +150,10 @@ func (c *DeploymentControl) Status(ctx context.Context, retryAttempts int, retry
 			replicas = *(currentDeployment.Spec.Replicas)
 		}
 		if currentDeployment.Status.UpdatedReplicas != replicas {
-			return trace.CompareFailed("expected replicas: %v, ready: %v", replicas, currentDeployment.Status.UpdatedReplicas)
+			return trace.CompareFailed("expected replicas: %v, updated: %v", replicas, currentDeployment.Status.UpdatedReplicas)
 		}
-		pods, err := c.collectPods(currentDeployment)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		for _, pod := range pods {
-			if pod.Status.Phase != v1.PodRunning {
-				return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
-			}
+		if currentDeployment.Status.AvailableReplicas != replicas {
+			return trace.CompareFailed("expected replicas: %v, available: %v", replicas, currentDeployment.Status.AvailableReplicas)
 		}
 		return nil
 	})
