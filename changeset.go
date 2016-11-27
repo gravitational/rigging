@@ -82,122 +82,82 @@ type Changeset struct {
 	client *rest.RESTClient
 }
 
-type ChangesetList struct {
-	unversioned.TypeMeta `json:",inline"`
-	// Standard list metadata
-	// More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
-	unversioned.ListMeta `json:"metadata,omitempty"`
-	// Items is a list of third party objects
-	Items []ChangesetResource `json:"items"`
-}
-
-func (tr *ChangesetList) GetObjectKind() unversioned.ObjectKind {
-	return &tr.TypeMeta
-}
-
-type ChangesetResource struct {
-	unversioned.TypeMeta `json:",inline"`
-	v1.ObjectMeta        `json:"metadata,omitempty"`
-	Spec                 ChangesetSpec `json:"spec"`
-}
-
-func (tr *ChangesetResource) GetObjectKind() unversioned.ObjectKind {
-	return &tr.TypeMeta
-}
-
-func (tr *ChangesetResource) String() string {
-	return fmt.Sprintf("namespace=%v, name=%v, operations=%v)", tr.Namespace, tr.Name, len(tr.Spec.Items))
-}
-
-type ChangesetSpec struct {
-	Status string          `json:"status"`
-	Items  []ChangesetItem `json:"items"`
-}
-
-type ChangesetItem struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Status string `json:"status"`
-}
-
-type OperationInfo struct {
-	From *ResourceHeader
-	To   *ResourceHeader
-}
-
-func (o *OperationInfo) Kind() string {
-	if o.From != nil && o.From.Kind != "" {
-		return o.From.Kind
-	}
-	if o.To != nil && o.To.Kind != "" {
-		return o.To.Kind
-	}
-	return ""
-}
-
-func (o *OperationInfo) String() string {
-	if o.From != nil && o.To == nil {
-		return fmt.Sprintf("delete %v %v from namespace %v", o.From.Kind, o.From.Name, Namespace(o.From.Namespace))
-	}
-	if o.From != nil && o.To != nil {
-		return fmt.Sprintf("update %v %v in namespace %v", o.To.Kind, o.To.Name, Namespace(o.To.Namespace))
-	}
-	if o.From == nil && o.To != nil {
-		return fmt.Sprintf("upsert %v %v in namespace %v", o.To.Kind, o.To.Name, Namespace(o.To.Namespace))
-	}
-	return "unknown operation"
-}
-
-// GetOperationInfo returns operation information
-func GetOperationInfo(item ChangesetItem) (*OperationInfo, error) {
-	var info OperationInfo
-	if item.From != "" {
-		from, err := ParseResourceHeader(strings.NewReader(item.From))
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		info.From = from
-	}
-	if item.To != "" {
-		to, err := ParseResourceHeader(strings.NewReader(item.To))
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		info.To = to
-	}
-	return &info, nil
-}
-
-func (cs *Changeset) status(ctx context.Context, data []byte) error {
-	header, err := ParseResourceHeader(bytes.NewReader(data))
+// Upsert upserts resource in a context of a changeset
+func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
+	tr, err := cs.createOrRead(&ChangesetResource{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name: changesetName,
+		},
+		Spec: ChangesetSpec{
+			Status: ChangesetStatusInProgress,
+		},
+	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	switch header.Kind {
+	if tr.Spec.Status != ChangesetStatusInProgress {
+		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
+	}
+	var kind unversioned.TypeMeta
+	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	switch kind.Kind {
 	case KindDaemonSet:
-		return cs.statusDaemonSet(ctx, data)
+		_, err = cs.upsertDaemonSet(ctx, tr, data)
+		return err
 	case KindReplicationController:
-		return cs.statusRC(ctx, data)
+		_, err = cs.upsertRC(ctx, tr, data)
+		return err
 	}
-	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
+	return trace.BadParameter("unsupported resource type %v", kind.Kind)
 }
 
-func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
-	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+// Status checks all statuses for all resources updated or added in the context of a given changeset
+func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetName string, retryAttempts int, retryPeriod time.Duration) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
-}
-
-func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
-	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: cs.Client})
-	if err != nil {
-		return trace.Wrap(err)
+	if tr.Spec.Status == ChangesetStatusRolledBack {
+		return trace.CompareFailed("changeset has been rolled back")
 	}
-	return control.Status(ctx, 1, 0)
+	if retryAttempts == 0 {
+		retryAttempts = DefaultRetryAttempts
+	}
+	if retryPeriod == 0 {
+		retryPeriod = DefaultRetryPeriod
+	}
+	return retry(ctx, retryAttempts, retryPeriod, func() error {
+		for i, op := range tr.Spec.Items {
+			switch op.Status {
+			case OpStatusRolledBack:
+				log.Infof("%v is rolled back, skip status check", i)
+				continue
+			case OpStatusCreated:
+				return trace.BadParameter("%v is not completed yet", tr)
+			case OpStatusCompleted:
+				if op.To != "" {
+					if err := cs.status(ctx, []byte(op.To)); err != nil {
+						return trace.Wrap(err)
+					}
+				} else {
+					log.Infof("%v has deleted resource, nothing to check", i)
+				}
+			default:
+				return trace.BadParameter("unsupported operation status: %v", op.Status)
+			}
+		}
+		return nil
+	})
 }
 
+// DeleteResource deletes a resources in the context of a given changeset
 func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, changesetName string, resourceNamespace string, resource Ref, cascade bool) error {
 	if err := cs.Init(ctx); err != nil {
 		return trace.Wrap(err)
@@ -231,6 +191,88 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
+}
+
+// Freeze "freezes" changeset, prohibits adding or removing any changes to it
+func (cs *Changeset) Freeze(ctx context.Context, changesetNamespace, changesetName string) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if tr.Spec.Status != ChangesetStatusInProgress {
+		return trace.CompareFailed("changeset is not in progress")
+	}
+	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
+		item := &tr.Spec.Items[i]
+		if item.Status != OpStatusCompleted {
+			return trace.CompareFailed("operation %v is not completed", i)
+		}
+	}
+	tr.Spec.Status = ChangesetStatusCommited
+	_, err = cs.update(tr)
+	return trace.Wrap(err)
+}
+
+// Rollback rolls back all the operations in reverse order they were applied
+func (cs *Changeset) Rollback(ctx context.Context, changesetNamespace, changesetName string) error {
+	tr, err := cs.get(changesetNamespace, changesetName)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if tr.Spec.Status == ChangesetStatusRolledBack {
+		return trace.CompareFailed("changeset is already rolled back")
+	}
+	g := log.WithFields(log.Fields{
+		"tx": tr.String(),
+	})
+	g.Infof("rollback")
+	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
+		op := &tr.Spec.Items[i]
+		if op.Status != OpStatusCompleted {
+			g.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
+		}
+		if err := cs.rollback(ctx, op); err != nil {
+			return trace.Wrap(err)
+		}
+		op.Status = OpStatusRolledBack
+		tr, err = cs.update(tr)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	tr.Spec.Status = ChangesetStatusRolledBack
+	_, err = cs.update(tr)
+	return trace.Wrap(err)
+}
+
+func (cs *Changeset) status(ctx context.Context, data []byte) error {
+	header, err := ParseResourceHeader(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	switch header.Kind {
+	case KindDaemonSet:
+		return cs.statusDaemonSet(ctx, data)
+	case KindReplicationController:
+		return cs.statusRC(ctx, data)
+	}
+	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
+}
+
+func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
+	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status(ctx, 1, 0)
+}
+
+func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
+	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status(ctx, 1, 0)
 }
 
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
@@ -283,56 +325,6 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 	})
 }
 
-func (cs *Changeset) Freeze(ctx context.Context, changesetNamespace, changesetName string) error {
-	tr, err := cs.get(changesetNamespace, changesetName)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if tr.Spec.Status != ChangesetStatusInProgress {
-		return trace.CompareFailed("changeset is not in progress")
-	}
-	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
-		item := &tr.Spec.Items[i]
-		if item.Status != OpStatusCompleted {
-			return trace.CompareFailed("operation %v is not completed", i)
-		}
-	}
-	tr.Spec.Status = ChangesetStatusCommited
-	_, err = cs.update(tr)
-	return trace.Wrap(err)
-}
-
-func (cs *Changeset) Rollback(ctx context.Context, changesetNamespace, changesetName string) error {
-	tr, err := cs.get(changesetNamespace, changesetName)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if tr.Spec.Status == ChangesetStatusRolledBack {
-		return trace.CompareFailed("changeset is already rolled back")
-	}
-	g := log.WithFields(log.Fields{
-		"tx": tr.String(),
-	})
-	g.Infof("rollback")
-	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
-		op := &tr.Spec.Items[i]
-		if op.Status != OpStatusCompleted {
-			g.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
-		}
-		if err := cs.rollback(ctx, op); err != nil {
-			return trace.Wrap(err)
-		}
-		op.Status = OpStatusRolledBack
-		tr, err = cs.update(tr)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-	tr.Spec.Status = ChangesetStatusRolledBack
-	_, err = cs.update(tr)
-	return trace.Wrap(err)
-}
-
 func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
 	info, err := GetOperationInfo(*item)
 	if err != nil {
@@ -382,79 +374,6 @@ func (cs *Changeset) rollbackRC(ctx context.Context, item *ChangesetItem) error 
 		return trace.Wrap(err)
 	}
 	return control.Upsert(ctx)
-}
-
-func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetName string, retryAttempts int, retryPeriod time.Duration) error {
-	tr, err := cs.get(changesetNamespace, changesetName)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if tr.Spec.Status == ChangesetStatusRolledBack {
-		return trace.CompareFailed("changeset has been rolled back")
-	}
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		for i, op := range tr.Spec.Items {
-			switch op.Status {
-			case OpStatusRolledBack:
-				log.Infof("%v is rolled back, skip status check", i)
-				continue
-			case OpStatusCreated:
-				return trace.BadParameter("%v is not completed yet", tr)
-			case OpStatusCompleted:
-				if op.To != "" {
-					if err := cs.status(ctx, []byte(op.To)); err != nil {
-						return trace.Wrap(err)
-					}
-				} else {
-					log.Infof("%v has deleted resource, nothing to check", i)
-				}
-			default:
-				return trace.BadParameter("unsupported operation status: %v", op.Status)
-			}
-		}
-		return nil
-	})
-}
-
-func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
-	tr, err := cs.createOrRead(&ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindChangeset,
-			APIVersion: ChangesetAPIVersion,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name: changesetName,
-		},
-		Spec: ChangesetSpec{
-			Status: ChangesetStatusInProgress,
-		},
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if tr.Spec.Status != ChangesetStatusInProgress {
-		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
-	}
-	var kind unversioned.TypeMeta
-	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	switch kind.Kind {
-	case KindDaemonSet:
-		_, err = cs.upsertDaemonSet(ctx, tr, data)
-		return err
-	case KindReplicationController:
-		_, err = cs.upsertRC(ctx, tr, data)
-		return err
-	}
-	return trace.BadParameter("unsupported resource type %v", kind.Kind)
 }
 
 func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old, new interface{}, fn func() error) (*ChangesetResource, error) {
