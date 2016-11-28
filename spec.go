@@ -17,6 +17,7 @@ package rigging
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gravitational/trace"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
@@ -56,9 +57,10 @@ type ChangesetSpec struct {
 }
 
 type ChangesetItem struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Status string `json:"status"`
+	From              string    `json:"from"`
+	To                string    `json:"to"`
+	Status            string    `json:"status"`
+	CreationTimestamp time.Time `json:"time"`
 }
 
 type OperationInfo struct {

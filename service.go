@@ -26,44 +26,44 @@ import (
 	"k8s.io/client-go/1.4/pkg/api/v1"
 )
 
-// NewConfigMapControl returns new instance of ConfigMap updater
-func NewConfigMapControl(config ConfigMapConfig) (*ConfigMapControl, error) {
+// NewServiceControl returns new instance of Service updater
+func NewServiceControl(config ServiceConfig) (*ServiceControl, error) {
 	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var rc *v1.ConfigMap
-	if config.ConfigMap != nil {
-		rc = config.ConfigMap
+	var rc *v1.Service
+	if config.Service != nil {
+		rc = config.Service
 	} else {
-		rc, err = ParseConfigMap(config.Reader)
+		rc, err = ParseService(config.Reader)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
-	rc.Kind = KindConfigMap
-	return &ConfigMapControl{
-		ConfigMapConfig: config,
-		configMap:       *rc,
+	rc.Kind = KindService
+	return &ServiceControl{
+		ServiceConfig: config,
+		service:       *rc,
 		Entry: log.WithFields(log.Fields{
-			"configMap": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+			"service": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
 		}),
 	}, nil
 }
 
-// ConfigMapConfig  is a ConfigMap control configuration
-type ConfigMapConfig struct {
+// ServiceConfig  is a Service control configuration
+type ServiceConfig struct {
 	// Reader with daemon set to update, will be used if present
 	Reader io.Reader
-	// ConfigMap is already parsed daemon set, will be used if present
-	ConfigMap *v1.ConfigMap
+	// Service is already parsed daemon set, will be used if present
+	Service *v1.Service
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-func (c *ConfigMapConfig) CheckAndSetDefaults() error {
-	if c.Reader == nil && c.ConfigMap == nil {
-		return trace.BadParameter("missing parameter Reader or ConfigMap")
+func (c *ServiceConfig) CheckAndSetDefaults() error {
+	if c.Reader == nil && c.Service == nil {
+		return trace.BadParameter("missing parameter Reader or Service")
 	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
@@ -71,40 +71,40 @@ func (c *ConfigMapConfig) CheckAndSetDefaults() error {
 	return nil
 }
 
-// ConfigMapControl is a daemon set controller,
+// ServiceControl is a daemon set controller,
 // adds various operations, like delete, status check and update
-type ConfigMapControl struct {
-	ConfigMapConfig
-	configMap v1.ConfigMap
+type ServiceControl struct {
+	ServiceConfig
+	service v1.Service
 	*log.Entry
 }
 
-func (c *ConfigMapControl) Delete(ctx context.Context, cascade bool) error {
+func (c *ServiceControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("Delete")
-	err := c.Client.Core().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name, nil)
+	err := c.Client.Core().Services(c.service.Namespace).Delete(c.service.Name, nil)
 	return convertErr(err)
 }
 
-func (c *ConfigMapControl) Upsert(ctx context.Context) error {
+func (c *ServiceControl) Upsert(ctx context.Context) error {
 	c.Infof("Upsert")
-	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
-	c.configMap.UID = ""
-	c.configMap.SelfLink = ""
-	c.configMap.ResourceVersion = ""
-	_, err := configMaps.Get(c.configMap.Name)
+	services := c.Client.Core().Services(c.service.Namespace)
+	c.service.UID = ""
+	c.service.SelfLink = ""
+	c.service.ResourceVersion = ""
+	_, err := services.Get(c.service.Name)
 	err = convertErr(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = configMaps.Create(&c.configMap)
+		_, err = services.Create(&c.service)
 		return convertErr(err)
 	}
-	_, err = configMaps.Update(&c.configMap)
+	_, err = services.Update(&c.service)
 	return convertErr(err)
 }
 
-func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
 	}
@@ -114,8 +114,8 @@ func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryP
 	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
 
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
-		_, err := configMaps.Get(c.configMap.Name)
+		services := c.Client.Core().Services(c.service.Namespace)
+		_, err := services.Get(c.service.Name)
 		if err != nil {
 			return trace.Wrap(err)
 		}

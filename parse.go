@@ -33,7 +33,7 @@ type ResourceHeader struct {
 // ParseResourceHeader parses resource header information
 func ParseResourceHeader(reader io.Reader) (*ResourceHeader, error) {
 	var out ResourceHeader
-	err := yaml.NewYAMLOrJSONDecoder(reader, 1024).Decode(&out)
+	err := yaml.NewYAMLOrJSONDecoder(reader, DefaultBufferSize).Decode(&out)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -46,7 +46,7 @@ func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
 		return nil, trace.BadParameter("missing reader")
 	}
 	ds := v1beta1.DaemonSet{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ds)
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ds)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -57,7 +57,7 @@ func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
 // used in annotations
 func ParseSerializedReference(r io.Reader) (*api.SerializedReference, error) {
 	ref := api.SerializedReference{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&ref)
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ref)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -70,7 +70,7 @@ func ParseReplicationController(r io.Reader) (*v1.ReplicationController, error) 
 		return nil, trace.BadParameter("missing reader")
 	}
 	rc := v1.ReplicationController{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&rc)
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&rc)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -83,9 +83,48 @@ func ParseDeployment(r io.Reader) (*v1beta1.Deployment, error) {
 		return nil, trace.BadParameter("missing reader")
 	}
 	rc := v1beta1.Deployment{}
-	err := yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&rc)
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&rc)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &rc, nil
+}
+
+// ParseService parses service
+func ParseService(r io.Reader) (*v1.Service, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	svc := v1.Service{}
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&svc)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &svc, nil
+}
+
+// ParseConfigMap parses Config Map
+func ParseConfigMap(r io.Reader) (*v1.ConfigMap, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	cm := v1.ConfigMap{}
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&cm)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &cm, nil
+}
+
+// ParseSecret parses secret
+func ParseSecret(r io.Reader) (*v1.Secret, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	secret := v1.Secret{}
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&secret)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &secret, nil
 }

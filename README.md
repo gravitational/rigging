@@ -1,6 +1,6 @@
 # Rig
 
-Rig tool uses third-party resources to add changeset semantics to all Kubernetes resources:
+Rig tool uses third-party resources to add changeset semantics to Kubernetes operations:
 
 ```sh
 # upsert a daemon set (changeset is created automatically)
@@ -11,8 +11,8 @@ rig delete change1 svc/service1
 rig delete change1 configmaps/cf1
 # check status
 rig status change1
-# rollback everything
-rig rollback change1
+# revert everything
+rig revert change1
 # or freeze changeset, so it can no longer be updated
 rig freeze change1
 ```

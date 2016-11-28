@@ -76,7 +76,7 @@ func NewChangeset(config ChangesetConfig) (*Changeset, error) {
 	return &Changeset{ChangesetConfig: config, client: clt}, nil
 }
 
-// Changeset is a is a collection changeset log that can rollback a series of
+// Changeset is a is a collection changeset log that can revert a series of
 // changes to the system
 type Changeset struct {
 	ChangesetConfig
@@ -117,6 +117,15 @@ func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetNa
 		return err
 	case KindDeployment:
 		_, err = cs.upsertDeployment(ctx, tr, data)
+		return err
+	case KindService:
+		_, err = cs.upsertService(ctx, tr, data)
+		return err
+	case KindConfigMap:
+		_, err = cs.upsertConfigMap(ctx, tr, data)
+		return err
+	case KindSecret:
+		_, err = cs.upsertSecret(ctx, tr, data)
 		return err
 	}
 	return trace.BadParameter("unsupported resource type %v", kind.Kind)
@@ -195,6 +204,12 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindDeployment:
 		return cs.deleteDeployment(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindSecret:
+		return cs.deleteSecret(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindConfigMap:
+		return cs.deleteConfigMap(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindService:
+		return cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
 }
@@ -229,15 +244,15 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 		return trace.CompareFailed("changeset is already reverted")
 	}
 	g := log.WithFields(log.Fields{
-		"tx": tr.String(),
+		"cs": tr.String(),
 	})
-	g.Infof("roverting")
+	g.Infof("reverting")
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
 		if op.Status != OpStatusCompleted {
 			g.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
 		}
-		if err := cs.rollback(ctx, op); err != nil {
+		if err := cs.revert(ctx, op); err != nil {
 			return trace.Wrap(err)
 		}
 		op.Status = OpStatusReverted
@@ -263,6 +278,12 @@ func (cs *Changeset) status(ctx context.Context, data []byte) error {
 		return cs.statusRC(ctx, data)
 	case KindDeployment:
 		return cs.statusDeployment(ctx, data)
+	case KindService:
+		return cs.statusService(ctx, data)
+	case KindSecret:
+		return cs.statusSecret(ctx, data)
+	case KindConfigMap:
+		return cs.statusConfigMap(ctx, data)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -291,18 +312,28 @@ func (cs *Changeset) statusDeployment(ctx context.Context, data []byte) error {
 	return control.Status(ctx, 1, 0)
 }
 
-func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
+func (cs *Changeset) statusService(ctx context.Context, data []byte) error {
+	control, err := NewServiceControl(ServiceConfig{Reader: bytes.NewReader(data), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
+	return control.Status(ctx, 1, 0)
+}
+
+func (cs *Changeset) statusSecret(ctx context.Context, data []byte) error {
+	control, err := NewSecretControl(SecretConfig{Reader: bytes.NewReader(data), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, ds, func() error {
-		return control.Delete(ctx, cascade)
-	})
+	return control.Status(ctx, 1, 0)
+}
+
+func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte) error {
+	control, err := NewConfigMapControl(ConfigMapConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status(ctx, 1, 0)
 }
 
 func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj interface{}, fn func() error) error {
@@ -311,8 +342,9 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 		return trace.Wrap(err)
 	}
 	tr.Spec.Items = append(tr.Spec.Items, ChangesetItem{
-		From:   string(data),
-		Status: OpStatusCreated,
+		From:              string(data),
+		Status:            OpStatusCreated,
+		CreationTimestamp: time.Now().UTC(),
 	})
 	tr, err = cs.update(tr)
 	if err != nil {
@@ -325,6 +357,20 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
 	_, err = cs.update(tr)
 	return err
+}
+
+func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, ds, func() error {
+		return control.Delete(ctx, cascade)
+	})
 }
 
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
@@ -355,7 +401,49 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 	})
 }
 
-func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
+func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, service, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, configMap, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, secret, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
 	info, err := GetOperationInfo(*item)
 	if err != nil {
 		if err != nil {
@@ -365,16 +453,22 @@ func (cs *Changeset) rollback(ctx context.Context, item *ChangesetItem) error {
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
-		return cs.rollbackDaemonSet(ctx, item)
+		return cs.revertDaemonSet(ctx, item)
 	case KindReplicationController:
-		return cs.rollbackRC(ctx, item)
+		return cs.revertRC(ctx, item)
 	case KindDeployment:
-		return cs.rollbackDeployment(ctx, item)
+		return cs.revertDeployment(ctx, item)
+	case KindService:
+		return cs.revertService(ctx, item)
+	case KindSecret:
+		return cs.revertSecret(ctx, item)
+	case KindConfigMap:
+		return cs.revertConfigMap(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
 
-func (cs *Changeset) rollbackDaemonSet(ctx context.Context, item *ChangesetItem) error {
+func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) error {
 	// this operation created daemon set, so we will delete it
 	if len(item.From) == 0 {
 		control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
@@ -391,7 +485,7 @@ func (cs *Changeset) rollbackDaemonSet(ctx context.Context, item *ChangesetItem)
 	return control.Upsert(ctx)
 }
 
-func (cs *Changeset) rollbackRC(ctx context.Context, item *ChangesetItem) error {
+func (cs *Changeset) revertRC(ctx context.Context, item *ChangesetItem) error {
 	// this operation created RC, so we will delete it
 	if len(item.From) == 0 {
 		control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
@@ -408,7 +502,7 @@ func (cs *Changeset) rollbackRC(ctx context.Context, item *ChangesetItem) error 
 	return control.Upsert(ctx)
 }
 
-func (cs *Changeset) rollbackDeployment(ctx context.Context, item *ChangesetItem) error {
+func (cs *Changeset) revertDeployment(ctx context.Context, item *ChangesetItem) error {
 	// this operation created Deployment, so we will delete it
 	if len(item.From) == 0 {
 		control, err := NewDeploymentControl(DeploymentConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
@@ -425,14 +519,66 @@ func (cs *Changeset) rollbackDeployment(ctx context.Context, item *ChangesetItem
 	return control.Upsert(ctx)
 }
 
+func (cs *Changeset) revertService(ctx context.Context, item *ChangesetItem) error {
+	// this operation created Service, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewServiceControl(ServiceConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+	// this operation either created or updated Service, so we create a new version
+	control, err := NewServiceControl(ServiceConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertConfigMap(ctx context.Context, item *ChangesetItem) error {
+	// this operation created ConfigMap, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewConfigMapControl(ConfigMapConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+	// this operation either created or updated ConfigMap, so we create a new version
+	control, err := NewConfigMapControl(ConfigMapConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) error {
+	// this operation created Secret, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewSecretControl(SecretConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+	// this operation either created or updated Secret, so we create a new version
+	control, err := NewSecretControl(SecretConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
 func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old interface{}, new interface{}, fn func() error) (*ChangesetResource, error) {
 	to, err := goyaml.Marshal(new)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	item := ChangesetItem{
-		To:     string(to),
-		Status: OpStatusCreated,
+		CreationTimestamp: time.Now().UTC(),
+		To:                string(to),
+		Status:            OpStatusCreated,
 	}
 	if !reflect.ValueOf(old).IsNil() {
 		from, err := goyaml.Marshal(old)
@@ -535,6 +681,93 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 		return nil, trace.Wrap(err)
 	}
 	return cs.withUpsertOp(ctx, tr, currentDeployment, deployment, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	service, err := ParseService(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	g := log.WithFields(log.Fields{
+		"cs":      tr.String(),
+		"service": fmt.Sprintf("%v/%v", service.Namespace, service.Name),
+	})
+	g.Infof("upsert")
+	services := cs.Client.Core().Services(service.Namespace)
+	currentService, err := services.Get(service.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Infof("existing Service not found")
+		currentService = nil
+	}
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentService, service, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	configMap, err := ParseConfigMap(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	g := log.WithFields(log.Fields{
+		"cs":        tr.String(),
+		"configMap": fmt.Sprintf("%v/%v", configMap.Namespace, configMap.Name),
+	})
+	g.Infof("upsert")
+	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
+	currentConfigMap, err := configMaps.Get(configMap.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Infof("existing ConfigMap not found")
+		currentConfigMap = nil
+	}
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentConfigMap, configMap, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	secret, err := ParseSecret(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	g := log.WithFields(log.Fields{
+		"cs":     tr.String(),
+		"secret": fmt.Sprintf("%v/%v", secret.Namespace, secret.Name),
+	})
+	g.Infof("upsert")
+	secrets := cs.Client.Core().Secrets(secret.Namespace)
+	currentSecret, err := secrets.Get(secret.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Infof("existing Secret not found")
+		currentSecret = nil
+	}
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentSecret, secret, func() error {
 		return control.Upsert(ctx)
 	})
 }

@@ -264,6 +264,8 @@ const (
 	outputYAML = "yaml"
 	outputText = "text"
 	outputJSON = "json"
+	// humanDateFormat is a human readable date formatting
+	humanDateFormat = "Mon Jan _2 15:04 UTC"
 )
 
 func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, ref rigging.Ref, output string) error {
@@ -296,9 +298,9 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 			w := new(tabwriter.Writer)
 			w.Init(os.Stdout, 0, 8, 1, '\t', 0)
 			defer w.Flush()
-			fmt.Fprintf(w, "Name\tStatus\tOperations\n")
+			fmt.Fprintf(w, "Name\tCreated\tStatus\tOperations\n")
 			for _, tr := range changesets.Items {
-				fmt.Fprintf(w, "%v\t%v\t%v\n", tr.Name, tr.Spec.Status, len(tr.Spec.Items))
+				fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", tr.Name, tr.CreationTimestamp.Format(humanDateFormat), tr.Spec.Status, len(tr.Spec.Items))
 			}
 			return nil
 		}
@@ -320,7 +322,7 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 		w := new(tabwriter.Writer)
 		w.Init(os.Stdout, 0, 8, 1, '\t', 0)
 		defer w.Flush()
-		fmt.Fprintf(w, "Operation\tStatus\tDescription\n")
+		fmt.Fprintf(w, "Operation\tTime\tStatus\tDescription\n")
 		for i, op := range tr.Spec.Items {
 			var info string
 			opInfo, err := rigging.GetOperationInfo(op)
@@ -329,7 +331,7 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 			} else {
 				info = opInfo.String()
 			}
-			fmt.Fprintf(w, "%v\t%v\t%v\n", i, op.Status, info)
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", i, op.CreationTimestamp.Format(humanDateFormat), op.Status, info)
 		}
 		return nil
 	}
