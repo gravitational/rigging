@@ -97,7 +97,7 @@ func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetNa
 			}
 			return trace.Wrap(err)
 		}
-		err = cs.upsertResource(ctx, changesetNamespace, changesetName, data)
+		err = cs.upsertResource(ctx, changesetNamespace, changesetName, raw.Raw)
 		if err != nil {
 			return trace.Wrap(err)
 		}
