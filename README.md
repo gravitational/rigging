@@ -17,7 +17,6 @@ rig revert change1
 rig freeze change1
 ```
 
-
 ## Changeset management
 
 You can view your changesets to see what happened:
@@ -40,4 +39,27 @@ rig get change1 -o yaml
 ```sh
 rig cs delete change1
 ```
+
+## Details
+
+### Supported resources
+
+The following resources are supported:
+
+* ConifgMap
+* DaemonSet
+* ReplicationController
+* Service
+* Secret
+* Deployment
+
+### Updates
+
+Only `Deployment` updates are rolling, updating of daemon sets or replication controllers simply deletes all the pods
+
+### Status checks
+
+Rig adds additional condition to consider `Deployment`, `DaemonSet` or `ReplicatonController` as ready - all pods must be in `Running` state.
+
+
 
