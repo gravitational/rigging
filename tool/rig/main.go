@@ -43,7 +43,7 @@ func run() error {
 		namespace  = app.Flag("namespace", "Namespace of the changesets").Default(rigging.DefaultNamespace).String()
 
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
-		cupsertChangeset = Ref(cupsert.Arg("changeset", "name of the changeset").Required())
+		cupsertChangeset = Ref(cupsert.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
 		cupsertFile      = cupsert.Flag("file", "file with new resource spec").Short('f').Required().String()
 
 		cstatus         = app.Command("status", "Check status of all operations in a changeset")
@@ -52,19 +52,19 @@ func run() error {
 		cstatusPeriod   = cstatus.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
 
 		cget          = app.Command("get", "Display one or many changesets")
-		cgetChangeset = Ref(cget.Arg("changeset", "Changeset name"))
+		cgetChangeset = Ref(cget.Arg("changeset", "Changeset name").Envar(changesetEnvVar))
 		cgetOut       = cget.Flag("output", "output type, one of 'yaml' or 'text'").Short('o').Default("").String()
 
 		ctr = app.Command("cs", "low level operations on changesets")
 
 		ctrDelete          = ctr.Command("delete", "Delete a changeset by name")
-		ctrDeleteChangeset = Ref(ctrDelete.Arg("changeset", "Changeset name").Required())
+		ctrDeleteChangeset = Ref(ctrDelete.Arg("changeset", "Changeset name").Envar(changesetEnvVar).Required())
 
 		crevert          = app.Command("revert", "Revert the changeset")
-		crevertChangeset = Ref(crevert.Arg("changeset", "name of the changeset").Required())
+		crevertChangeset = Ref(crevert.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
 
 		cfreeze          = app.Command("freeze", "Freeze the changeset")
-		cfreezeChangeset = Ref(cfreeze.Arg("changeset", "name of the changeset").Required())
+		cfreezeChangeset = Ref(cfreeze.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
 
 		cdelete                  = app.Command("delete", "Delete a resource in a context of a changeset")
 		cdeleteCascade           = cdelete.Flag("cascade", "Delete sub resouces, e.g. Pods for Daemonset").Default("true").Bool()
@@ -266,6 +266,7 @@ const (
 	outputJSON = "json"
 	// humanDateFormat is a human readable date formatting
 	humanDateFormat = "Mon Jan _2 15:04 UTC"
+	changesetEnvVar = "RIG_CHANGESET"
 )
 
 func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, ref rigging.Ref, output string) error {
