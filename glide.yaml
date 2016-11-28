@@ -1,0 +1,29 @@
+package: github.com/gravitational/rigging
+import:
+- package: github.com/Sirupsen/logrus
+  subpackages:
+  - hooks/syslog
+- package: github.com/ghodss/yaml
+- package: github.com/gravitational/trace
+- package: gopkg.in/alecthomas/kingpin.v2
+- package: k8s.io/client-go
+  version: v1.4.0
+  subpackages:
+  - 1.4/kubernetes
+  - 1.4/pkg/api
+  - 1.4/pkg/api/errors
+  - 1.4/pkg/api/unversioned
+  - 1.4/pkg/api/v1
+  - 1.4/pkg/apis/extensions/v1beta1
+  - 1.4/pkg/labels
+  - 1.4/pkg/runtime
+  - 1.4/pkg/runtime/serializer
+  - 1.4/pkg/util/yaml
+  - 1.4/rest
+  - 1.4/tools/clientcmd
+- package: golang.org/x/net
+  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+- package: github.com/docker/distribution
+  version: 0a3acb2625f553a71392ed9dc6ba1dde2cf3e3a8
+testImport:
+- package: gopkg.in/check.v1
