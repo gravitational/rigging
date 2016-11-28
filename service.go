@@ -88,18 +88,19 @@ func (c *ServiceControl) Delete(ctx context.Context, cascade bool) error {
 func (c *ServiceControl) Upsert(ctx context.Context) error {
 	c.Infof("Upsert")
 	services := c.Client.Core().Services(c.service.Namespace)
-	c.service.UID = ""
-	c.service.SelfLink = ""
-	c.service.ResourceVersion = ""
-	_, err := services.Get(c.service.Name)
+	currentService, err := services.Get(c.service.Name)
 	err = convertErr(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
+		c.service.UID = ""
+		c.service.SelfLink = ""
+		c.service.ResourceVersion = ""
 		_, err = services.Create(&c.service)
 		return convertErr(err)
 	}
+	c.service.ResourceVersion = currentService.ResourceVersion
 	_, err = services.Update(&c.service)
 	return convertErr(err)
 }

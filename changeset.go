@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -85,6 +86,25 @@ type Changeset struct {
 
 // Upsert upserts resource in a context of a changeset
 func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), DefaultBufferSize)
+
+	for {
+		var raw runtime.Unknown
+		err := decoder.Decode(&raw)
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return trace.Wrap(err)
+		}
+		err = cs.upsertResource(ctx, changesetNamespace, changesetName, data)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+}
+
+func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
 	tr, err := cs.createOrRead(&ChangesetResource{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       KindChangeset,
