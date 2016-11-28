@@ -15,42 +15,110 @@
 package rigging
 
 import (
-	"io/ioutil"
-	"os"
-	"path"
+	"context"
+	"fmt"
+	"io"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.4/pkg/api/v1"
 )
 
-// CreateSecretFromPath creates a Kubernetes Secret of the supplied name, from the file or directory supplied as an argument.
-func CreateSecretFromPath(name string, path string) ([]byte, error) {
-	cmd := KubeCommand("create", "secret", "generic", "name", "--from-file="+path)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, trace.Wrap(err)
-	}
-	return out, nil
-}
-
-// CreateSecretFromMap creates a Kubernetes Secret of the supplied name, with the supplied map of keys and values.
-func CreateSecretFromMap(name string, values map[string]string) ([]byte, error) {
-	dir, err := ioutil.TempDir("", "rigging")
+// NewSecretControl returns new instance of Secret updater
+func NewSecretControl(config SecretConfig) (*SecretControl, error) {
+	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer os.RemoveAll(dir)
-
-	for key, val := range values {
-		err := ioutil.WriteFile(path.Join(dir, key), []byte(val), 0644)
+	var rc *v1.Secret
+	if config.Secret != nil {
+		rc = config.Secret
+	} else {
+		rc, err = ParseSecret(config.Reader)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
+	rc.Kind = KindSecret
+	return &SecretControl{
+		SecretConfig: config,
+		secret:       *rc,
+		Entry: log.WithFields(log.Fields{
+			"secret": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+		}),
+	}, nil
+}
 
-	cmd := KubeCommand("create", "secret", "generic", name, "--from-file="+dir)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, trace.Wrap(err)
+// SecretConfig  is a Secret control configuration
+type SecretConfig struct {
+	// Reader with daemon set to update, will be used if present
+	Reader io.Reader
+	// Secret is already parsed daemon set, will be used if present
+	Secret *v1.Secret
+	// Client is k8s client
+	Client *kubernetes.Clientset
+}
+
+func (c *SecretConfig) CheckAndSetDefaults() error {
+	if c.Reader == nil && c.Secret == nil {
+		return trace.BadParameter("missing parameter Reader or Secret")
 	}
-	return out, nil
+	if c.Client == nil {
+		return trace.BadParameter("missing parameter Client")
+	}
+	return nil
+}
+
+// SecretControl is a daemon set controller,
+// adds various operations, like delete, status check and update
+type SecretControl struct {
+	SecretConfig
+	secret v1.Secret
+	*log.Entry
+}
+
+func (c *SecretControl) Delete(ctx context.Context, cascade bool) error {
+	c.Infof("Delete")
+	err := c.Client.Core().Secrets(c.secret.Namespace).Delete(c.secret.Name, nil)
+	return convertErr(err)
+}
+
+func (c *SecretControl) Upsert(ctx context.Context) error {
+	c.Infof("Upsert")
+	secrets := c.Client.Core().Secrets(c.secret.Namespace)
+	c.secret.UID = ""
+	c.secret.SelfLink = ""
+	c.secret.ResourceVersion = ""
+	_, err := secrets.Get(c.secret.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return trace.Wrap(err)
+		}
+		_, err = secrets.Create(&c.secret)
+		return convertErr(err)
+	}
+	_, err = secrets.Update(&c.secret)
+	return convertErr(err)
+}
+
+func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+	if retryAttempts == 0 {
+		retryAttempts = DefaultRetryAttempts
+	}
+	if retryPeriod == 0 {
+		retryPeriod = DefaultRetryPeriod
+	}
+	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+
+	return retry(ctx, retryAttempts, retryPeriod, func() error {
+		secrets := c.Client.Core().Secrets(c.secret.Namespace)
+		_, err := secrets.Get(c.secret.Name)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return nil
+	})
 }
