@@ -67,6 +67,7 @@ func run() error {
 		cfreezeChangeset = Ref(cfreeze.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 
 		cdelete                  = app.Command("delete", "Delete a resource in a context of a changeset")
+		cdeleteForce             = cdelete.Flag("force", "Ignore error if resource is not found").Bool()
 		cdeleteCascade           = cdelete.Flag("cascade", "Delete sub resouces, e.g. Pods for Daemonset").Default("true").Bool()
 		cdeleteChangeset         = Ref(cdelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
@@ -107,7 +108,7 @@ func run() error {
 	case cget.FullCommand():
 		return get(ctx, client, config, *namespace, *cgetChangeset, *cgetOut)
 	case cdelete.FullCommand():
-		return deleteResource(ctx, client, config, *namespace, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade)
+		return deleteResource(ctx, client, config, *namespace, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade, *cdeleteForce)
 	case ctrDelete.FullCommand():
 		return csDelete(ctx, client, config, *namespace, *ctrDeleteChangeset)
 	case crevert.FullCommand():
@@ -185,7 +186,7 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	return nil
 }
 
-func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, resourceNamespace string, resource rigging.Ref, cascade bool) error {
+func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, resourceNamespace string, resource rigging.Ref, cascade, force bool) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
@@ -198,6 +199,10 @@ func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *r
 	}
 	err = cs.DeleteResource(ctx, namespace, changeset.Name, resourceNamespace, resource, cascade)
 	if err != nil {
+		if force && trace.IsNotFound(err) {
+			fmt.Printf("%v is not found, force flag is set, %v not updated, ignoring \n", resource.String(), changeset.Name)
+			return nil
+		}
 		return trace.Wrap(err)
 	}
 	fmt.Printf("changeset %v updated \n", changeset.Name)

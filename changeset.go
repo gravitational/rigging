@@ -382,7 +382,7 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
 	if err != nil {
@@ -396,7 +396,7 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
@@ -410,7 +410,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
@@ -424,7 +424,7 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
@@ -438,7 +438,7 @@ func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, n
 func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
@@ -452,7 +452,7 @@ func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource,
 func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
