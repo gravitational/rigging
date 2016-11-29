@@ -39,7 +39,7 @@ docker-build:
 .PHONY: docker-image
 docker-image:
 	$(eval TEMPDIR = "$(shell mktemp -d)")
-	if [ -z "$VAR" ]; then \
+	if [ -z "$$TEMPDIR" ]; then \
 	  echo "TEMPDIR is not set"; exit 1; \
 	fi;\
 	mkdir -p $(TEMPDIR)/build
