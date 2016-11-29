@@ -39,9 +39,9 @@ docker-build:
 .PHONY: docker-image
 docker-image:
 	$(eval TEMPDIR = "$(shell mktemp -d)")
-	if [ -z "$$TEMPDIR" ]; then \
+	if [ -z "$(TEMPDIR)" ]; then \
 	  echo "TEMPDIR is not set"; exit 1; \
-	fi;\
+	fi;
 	mkdir -p $(TEMPDIR)/build
 	BUILDDIR=$(TEMPDIR)/build $(MAKE) docker-build
 	cp -r docker/rig.dockerfile $(TEMPDIR)/Dockerfile
