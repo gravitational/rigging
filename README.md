@@ -4,17 +4,26 @@ Rig tool uses third-party resources to add changeset semantics to Kubernetes ope
 
 ```sh
 # upsert a daemon set (changeset is created automatically)
-rig upsert change1 -f daemonset.yaml
+rig upsert -c change1 -f daemonset.yaml
 # delete a service
-rig delete change1 svc/service1
+rig delete -c change1 svc/service1
 # update config map
-rig delete change1 configmaps/cf1
+rig delete -c change1 configmaps/cf1
 # check status
-rig status change1
+rig status -c change1
 # revert everything
-rig revert change1
+rig revert -c change1
 # or freeze changeset, so it can no longer be updated
-rig freeze change1
+rig freeze -c change1
+```
+
+**Environment variables**
+
+Use environment variables to bind rig to particular changeset
+
+```sh
+export RIG_CHANGESET=cs1
+rig upsert -f daemonset.yaml
 ```
 
 ## Changeset management

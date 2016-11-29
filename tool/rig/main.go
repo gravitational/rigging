@@ -43,7 +43,7 @@ func run() error {
 		namespace  = app.Flag("namespace", "Namespace of the changesets").Default(rigging.DefaultNamespace).String()
 
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
-		cupsertChangeset = Ref(cupsert.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
+		cupsertChangeset = Ref(cupsert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 		cupsertFile      = cupsert.Flag("file", "file with new resource spec").Short('f').Required().String()
 
 		cstatus         = app.Command("status", "Check status of all operations in a changeset")
@@ -52,23 +52,23 @@ func run() error {
 		cstatusPeriod   = cstatus.Flag("retry-period", "file with new daemon set spec").Default(fmt.Sprintf("%v", rigging.DefaultRetryPeriod)).Duration()
 
 		cget          = app.Command("get", "Display one or many changesets")
-		cgetChangeset = Ref(cget.Arg("changeset", "Changeset name").Envar(changesetEnvVar))
+		cgetChangeset = Ref(cget.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar))
 		cgetOut       = cget.Flag("output", "output type, one of 'yaml' or 'text'").Short('o').Default("").String()
 
 		ctr = app.Command("cs", "low level operations on changesets")
 
 		ctrDelete          = ctr.Command("delete", "Delete a changeset by name")
-		ctrDeleteChangeset = Ref(ctrDelete.Arg("changeset", "Changeset name").Envar(changesetEnvVar).Required())
+		ctrDeleteChangeset = Ref(ctrDelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 
 		crevert          = app.Command("revert", "Revert the changeset")
-		crevertChangeset = Ref(crevert.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
+		crevertChangeset = Ref(crevert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 
 		cfreeze          = app.Command("freeze", "Freeze the changeset")
-		cfreezeChangeset = Ref(cfreeze.Arg("changeset", "name of the changeset").Envar(changesetEnvVar).Required())
+		cfreezeChangeset = Ref(cfreeze.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 
 		cdelete                  = app.Command("delete", "Delete a resource in a context of a changeset")
 		cdeleteCascade           = cdelete.Flag("cascade", "Delete sub resouces, e.g. Pods for Daemonset").Default("true").Bool()
-		cdeleteChangeset         = Ref(cdelete.Arg("changeset", "Changeset name").Required())
+		cdeleteChangeset         = Ref(cdelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
 		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource name to delete").Default(rigging.DefaultNamespace).String()
 	)
