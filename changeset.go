@@ -631,6 +631,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 	g.Infof("upsert")
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
+	err = convertErr(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
