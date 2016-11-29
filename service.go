@@ -100,6 +100,7 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 		_, err = services.Create(&c.service)
 		return convertErr(err)
 	}
+	c.service.Spec.ClusterIP = currentService.Spec.ClusterIP
 	c.service.ResourceVersion = currentService.ResourceVersion
 	_, err = services.Update(&c.service)
 	return convertErr(err)
