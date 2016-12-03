@@ -58,6 +58,7 @@ func run() error {
 		ctr = app.Command("cs", "low level operations on changesets")
 
 		ctrDelete          = ctr.Command("delete", "Delete a changeset by name")
+		ctrDeleteForce     = ctrDelete.Flag("force", "Ignore error if resource is not found").Bool()
 		ctrDeleteChangeset = Ref(ctrDelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 
 		crevert          = app.Command("revert", "Revert the changeset")
@@ -110,7 +111,7 @@ func run() error {
 	case cdelete.FullCommand():
 		return deleteResource(ctx, client, config, *namespace, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade, *cdeleteForce)
 	case ctrDelete.FullCommand():
-		return csDelete(ctx, client, config, *namespace, *ctrDeleteChangeset)
+		return csDelete(ctx, client, config, *namespace, *ctrDeleteChangeset, *ctrDeleteForce)
 	case crevert.FullCommand():
 		return revert(ctx, client, config, *namespace, *crevertChangeset)
 	case cfreeze.FullCommand():
@@ -343,7 +344,7 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 	}
 }
 
-func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, tr rigging.Ref) error {
+func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, tr rigging.Ref, force bool) error {
 	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
@@ -353,6 +354,10 @@ func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 	}
 	err = cs.Delete(ctx, namespace, tr.Name)
 	if err != nil {
+		if trace.IsNotFound(err) && force {
+			fmt.Printf("%v is not found and force is set\n", tr.Name)
+			return nil
+		}
 		return trace.Wrap(err)
 	}
 	fmt.Printf("%v has been deleted\n", tr.Name)
