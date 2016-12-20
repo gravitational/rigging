@@ -183,7 +183,7 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("changeset %v freezed, no further modifications are allowed \n", changeset.Name)
+	fmt.Printf("changeset %v frozen, no further modifications are allowed\n", changeset.Name)
 	return nil
 }
 
