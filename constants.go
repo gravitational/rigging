@@ -26,7 +26,7 @@ const (
 	OpStatusReverted          = "reverted"
 	ChangesetStatusReverted   = "reverted"
 	ChangesetStatusInProgress = "in-progress"
-	ChangesetStatusCommited   = "commited"
+	ChangesetStatusCommitted  = "committed"
 	// DefaultRetryAttempts specifies amount of retry attempts for checks
 	DefaultRetryAttempts = 60
 	// RetryPeriod is a period between Retries
