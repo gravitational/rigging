@@ -157,15 +157,24 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if tr.Spec.Status == ChangesetStatusReverted {
+
+	// Fast path for certain states
+	switch tr.Spec.Status {
+	case ChangesetStatusCommitted:
+		// Nothing to do
+		return nil
+	case ChangesetStatusReverted:
 		return trace.CompareFailed("changeset has been reverted")
 	}
+
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
 	}
+
 	if retryPeriod == 0 {
 		retryPeriod = DefaultRetryPeriod
 	}
+
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
 		for i, op := range tr.Spec.Items {
 			switch op.Status {
@@ -249,7 +258,7 @@ func (cs *Changeset) Freeze(ctx context.Context, changesetNamespace, changesetNa
 			return trace.CompareFailed("operation %v is not completed", i)
 		}
 	}
-	tr.Spec.Status = ChangesetStatusCommited
+	tr.Spec.Status = ChangesetStatusCommitted
 	_, err = cs.update(tr)
 	return trace.Wrap(err)
 }
