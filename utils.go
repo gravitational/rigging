@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
 	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.4/pkg/labels"
 )
 
@@ -69,14 +68,11 @@ func FromStdIn(act action, data string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func collectPods(namespace string, selector *v1beta1.LabelSelector, entry *log.Entry, client *kubernetes.Clientset,
+func collectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
-	var set labels.Set
-	if selector != nil {
-		set = make(labels.Set)
-		for key, val := range selector.MatchLabels {
-			set[key] = val
-		}
+	set := make(labels.Set)
+	for key, val := range matchLabels {
+		set[key] = val
 	}
 
 	podList, err := client.Core().Pods(namespace).List(api.ListOptions{

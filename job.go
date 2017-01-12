@@ -24,7 +24,7 @@ import (
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
 	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
+	batchv1 "k8s.io/client-go/1.4/pkg/apis/batch/v1"
 )
 
 func newJobControl(config jobConfig) (*jobControl, error) {
@@ -45,7 +45,7 @@ func newJobControl(config jobConfig) (*jobControl, error) {
 func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Info("Delete")
 
-	jobs := c.Extensions().Jobs(c.job.Namespace)
+	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
 	if err != nil {
 		return trace.Wrap(err)
@@ -80,7 +80,7 @@ func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
 func (c *jobControl) Upsert(ctx context.Context) error {
 	c.Info("Upsert")
 
-	jobs := c.Extensions().Jobs(c.job.Namespace)
+	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
 	err = convertErr(err)
 	if err != nil {
@@ -130,7 +130,7 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 }
 
 func (c *jobControl) Status() error {
-	jobs := c.Extensions().Jobs(c.job.Namespace)
+	jobs := c.Batch().Jobs(c.job.Namespace)
 	job, err := jobs.Get(c.job.Name)
 	if err != nil {
 		return trace.Wrap(err)
@@ -145,15 +145,19 @@ func (c *jobControl) Status() error {
 	nodes, err := c.Core().Nodes().List(api.ListOptions{
 		LabelSelector: nodeSelector,
 	})
-	c.Infof("nodes: %v", nodeSelector)
+	c.Infof("nodes: %q", nodeSelector)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return checkRunning(pods, nodes.Items, c.Entry)
 }
 
-func (c *jobControl) collectPods(job *v1beta1.Job) (map[string]v1.Pod, error) {
-	pods, err := collectPods(job.Namespace, job.Spec.Selector, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
+func (c *jobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
+	var labels map[string]string
+	if job.Spec.Selector != nil {
+		labels = job.Spec.Selector.MatchLabels
+	}
+	pods, err := collectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
 	return pods, trace.Wrap(err)
@@ -165,7 +169,7 @@ type jobControl struct {
 }
 
 type jobConfig struct {
-	job v1beta1.Job
+	job batchv1.Job
 	*kubernetes.Clientset
 }
 

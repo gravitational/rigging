@@ -422,7 +422,7 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 }
 
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	job, err := cs.Client.Extensions().Jobs(Namespace(namespace)).Get(name)
+	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name)
 	if err != nil {
 		return convertErr(err)
 	}
@@ -565,9 +565,10 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 	}
 
 	if len(item.From) == 0 {
+		// this operation created the job, so we will delete it
 		return control.Delete(ctx, true)
 	}
-	// this operation either created or updated job - create a new version
+	// this operation either created or updated the job, so we create a new version
 	return control.Upsert(ctx)
 }
 
