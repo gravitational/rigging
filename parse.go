@@ -53,6 +53,20 @@ func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
 	return &ds, nil
 }
 
+// ParseJob parses the specified reader as a Job resource
+func ParseJob(r io.Reader) (*v1beta1.Job, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+
+	var job v1beta1.Job
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&job)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &job, nil
+}
+
 // ParseSerializedReference parses serialized reference object
 // used in annotations
 func ParseSerializedReference(r io.Reader) (*api.SerializedReference, error) {

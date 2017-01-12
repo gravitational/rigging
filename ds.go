@@ -118,20 +118,6 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 	return currentPods, nil
 }
 
-func (c *DSControl) checkRunning(pods map[string]v1.Pod, nodes []v1.Node) error {
-	for _, node := range nodes {
-		new, ok := pods[node.Name]
-		if !ok {
-			return trace.NotFound("not found any pod on node %v", node.Name)
-		}
-		if new.Status.Phase != v1.PodRunning {
-			return trace.CompareFailed("pod %v is not running yet: %v", new.Name, new.Status.Phase)
-		}
-		c.Infof("node %v: pod %v is up and running", node.Name, new.Name)
-	}
-	return nil
-}
-
 func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("Delete")
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
@@ -244,6 +230,6 @@ func (c *DSControl) Status(ctx context.Context, retryAttempts int, retryPeriod t
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return c.checkRunning(currentPods, nodes.Items)
+		return checkRunning(currentPods, nodes.Items, c.Entry)
 	})
 }

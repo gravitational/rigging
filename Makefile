@@ -25,7 +25,8 @@ DST := /gopath/src/github.com/gravitational/rigging
 # This directory
 SRC := $(dir $(CURDIR)/$(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))
 
-IMAGE := quay.io/gravitational/rig:0.0.1
+VERSION ?= 0.0.1
+IMAGE := quay.io/gravitational/rig:$(VERSION)
 
 # docker target starts build inside the container
 .PHONY: docker-build

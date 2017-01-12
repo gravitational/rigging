@@ -54,9 +54,9 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 
 // DeploymentConfig  is a Deployment control configuration
 type DeploymentConfig struct {
-	// Reader with daemon set to update, will be used if present
+	// Reader with deployment to update, will be used if present
 	Reader io.Reader
-	// Deployment is already parsed daemon set, will be used if present
+	// Deployment is already parsed deployment, will be used if present
 	Deployment *v1beta1.Deployment
 	// Client is k8s client
 	Client *kubernetes.Clientset
@@ -72,7 +72,7 @@ func (c *DeploymentConfig) CheckAndSetDefaults() error {
 	return nil
 }
 
-// DeploymentControl is a daemon set controller,
+// DeploymentControl is a deployment controller,
 // adds various operations, like delete, status check and update
 type DeploymentControl struct {
 	DeploymentConfig
