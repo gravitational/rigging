@@ -129,6 +129,9 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		return trace.Wrap(err)
 	}
 	switch kind.Kind {
+	case KindJob:
+		_, err = cs.upsertJob(ctx, tr, data)
+		return err
 	case KindDaemonSet:
 		_, err = cs.upsertDaemonSet(ctx, tr, data)
 		return err
@@ -229,6 +232,8 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	switch resource.Kind {
 	case KindDaemonSet:
 		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindJob:
+		return cs.deleteJob(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindReplicationController:
 		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindDeployment:
@@ -275,7 +280,7 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	g := log.WithFields(log.Fields{
 		"cs": tr.String(),
 	})
-	g.Infof("reverting")
+	g.Info("reverting")
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
 		if op.Status != OpStatusCompleted {
@@ -303,6 +308,8 @@ func (cs *Changeset) status(ctx context.Context, data []byte) error {
 	switch header.Kind {
 	case KindDaemonSet:
 		return cs.statusDaemonSet(ctx, data)
+	case KindJob:
+		return cs.statusJob(ctx, data)
 	case KindReplicationController:
 		return cs.statusRC(ctx, data)
 	case KindDeployment:
@@ -323,6 +330,18 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
 		return trace.Wrap(err)
 	}
 	return control.Status(ctx, 1, 0)
+}
+
+func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
+	job, err := ParseJob(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return status(ctx, 1, 0, control.Status, control.Entry)
 }
 
 func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
@@ -398,6 +417,20 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 		return trace.Wrap(err)
 	}
 	return cs.withDeleteOp(ctx, tr, ds, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name)
+	if err != nil {
+		return convertErr(err)
+	}
+	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, job, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -483,6 +516,8 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
 	switch info.Kind() {
 	case KindDaemonSet:
 		return cs.revertDaemonSet(ctx, item)
+	case KindJob:
+		return cs.revertJob(ctx, item)
 	case KindReplicationController:
 		return cs.revertRC(ctx, item)
 	case KindDeployment:
@@ -511,6 +546,29 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
+	jobSource := item.From
+	if len(jobSource) == 0 {
+		jobSource = item.To
+	}
+
+	job, err := ParseJob(strings.NewReader(jobSource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if len(item.From) == 0 {
+		// this operation created the job, so we will delete it
+		return control.Delete(ctx, true)
+	}
+	// this operation either created or updated the job, so we create a new version
 	return control.Upsert(ctx)
 }
 
@@ -626,6 +684,35 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 	}
 	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
 	return cs.update(tr)
+}
+
+func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	job, err := ParseJob(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	g := log.WithFields(log.Fields{
+		"cs":  tr.String(),
+		"job": fmt.Sprintf("%v/%v", job.Namespace, job.Name),
+	})
+	g.Info("upsert job")
+	jobs := cs.Client.Extensions().Jobs(job.Namespace)
+	currentJob, err := jobs.Get(job.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		g.Info("existing job is not found")
+		currentJob = nil
+	}
+	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentJob, job, func() error {
+		return control.Upsert(ctx)
+	})
 }
 
 func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {

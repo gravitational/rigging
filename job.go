@@ -15,39 +15,167 @@
 package rigging
 
 import (
-	"encoding/json"
-	"time"
+	"context"
+	"fmt"
 
 	"github.com/gravitational/trace"
+
+	log "github.com/Sirupsen/logrus"
+	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/v1"
+	batchv1 "k8s.io/client-go/1.4/pkg/apis/batch/v1"
 )
 
-func WaitForJobSuccess(name string, wait time.Duration) error {
-	start := time.Now()
+func newJobControl(config jobConfig) (*jobControl, error) {
+	err := config.checkAndSetDefaults()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 
-	for {
-		var job Job
+	config.job.Kind = KindJob
+	return &jobControl{
+		jobConfig: config,
+		Entry: log.WithFields(log.Fields{
+			"job": fmt.Sprintf("%v/%v", Namespace(config.job.Namespace), config.job.Name),
+		}),
+	}, nil
+}
 
-		cmd := KubeCommand("get", "job", name, "-o", "json")
-		out, err := cmd.Output()
+func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
+	c.Info("Delete")
+
+	jobs := c.Batch().Jobs(c.job.Namespace)
+	currentJob, err := jobs.Get(c.job.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	pods := c.Core().Pods(c.job.Namespace)
+	currentPods, err := c.collectPods(currentJob)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	c.Info("deleting current job")
+	err = jobs.Delete(c.job.Name, nil)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if !cascade {
+		c.Debug("cascade not set, returning")
+	}
+
+	c.Info("deleting pods")
+	for _, pod := range currentPods {
+		log.Infof("deleting pod %v", pod.Name)
+		if err := pods.Delete(pod.Name, nil); err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	return nil
+}
+
+func (c *jobControl) Upsert(ctx context.Context) error {
+	c.Info("Upsert")
+
+	jobs := c.Batch().Jobs(c.job.Namespace)
+	currentJob, err := jobs.Get(c.job.Name)
+	err = convertErr(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return trace.Wrap(err)
+		}
+		// Get always returns an object
+		currentJob = nil
+	}
+
+	pods := c.Core().Pods(c.job.Namespace)
+	var currentPods map[string]v1.Pod
+	if currentJob != nil {
+		c.Infof("currentJob: %v", currentJob.UID)
+		currentPods, err = c.collectPods(currentJob)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 
-		err = json.Unmarshal(out, &job)
+		c.Info("deleting current job")
+		err = jobs.Delete(c.job.Name, nil)
 		if err != nil {
 			return trace.Wrap(err)
-		}
-
-		if job.Status.Succeeded > 0 {
-			return nil
-		}
-
-		time.Sleep(time.Second)
-
-		if time.Since(start) >= wait {
-			return trace.Errorf("timed out waiting for job %v to succeed", name)
 		}
 	}
 
+	c.Info("creating new job")
+	c.job.UID = ""
+	c.job.SelfLink = ""
+	c.job.ResourceVersion = ""
+	_, err = jobs.Create(&c.job)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	c.Info("created successfully")
+	if currentJob != nil {
+		c.Info("deleting pods created by previous job")
+		for _, pod := range currentPods {
+			c.Infof("deleting pod %v", pod.Name)
+			if err := pods.Delete(pod.Name, nil); err != nil {
+				return trace.Wrap(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *jobControl) Status() error {
+	jobs := c.Batch().Jobs(c.job.Namespace)
+	job, err := jobs.Get(c.job.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	pods, err := c.collectPods(job)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	nodeSelector := nodeSelector(&c.job.Spec.Template.Spec)
+	nodes, err := c.Core().Nodes().List(api.ListOptions{
+		LabelSelector: nodeSelector,
+	})
+	c.Infof("nodes: %q", nodeSelector)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return checkRunning(pods, nodes.Items, c.Entry)
+}
+
+func (c *jobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
+	var labels map[string]string
+	if job.Spec.Selector != nil {
+		labels = job.Spec.Selector.MatchLabels
+	}
+	pods, err := collectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
+		return ref.Kind == KindJob && ref.UID == job.UID
+	})
+	return pods, trace.Wrap(err)
+}
+
+type jobControl struct {
+	jobConfig
+	*log.Entry
+}
+
+type jobConfig struct {
+	job batchv1.Job
+	*kubernetes.Clientset
+}
+
+func (c *jobConfig) checkAndSetDefaults() error {
+	if c.Clientset == nil {
+		return trace.BadParameter("missing parameter Clientset")
+	}
 	return nil
 }

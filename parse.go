@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/1.4/pkg/api"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
+	batchv1 "k8s.io/client-go/1.4/pkg/apis/batch/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/1.4/pkg/util/yaml"
 )
@@ -51,6 +52,20 @@ func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &ds, nil
+}
+
+// ParseJob parses the specified reader as a Job resource
+func ParseJob(r io.Reader) (*batchv1.Job, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+
+	var job batchv1.Job
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&job)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &job, nil
 }
 
 // ParseSerializedReference parses serialized reference object
