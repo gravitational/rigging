@@ -198,7 +198,7 @@ func (c *DSControl) status() error {
 	nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
 		LabelSelector: c.nodeSelector(),
 	})
-	c.Infof("nodes: %v", c.nodeSelector())
+	c.Infof("node selector: %v", c.nodeSelector())
 	if err != nil {
 		return trace.Wrap(err)
 	}

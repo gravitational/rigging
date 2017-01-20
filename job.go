@@ -150,7 +150,7 @@ func (c *jobControl) status() error {
 	nodes, err := c.Core().Nodes().List(api.ListOptions{
 		LabelSelector: nodeSelector,
 	})
-	c.Infof("nodes: %q", nodeSelector)
+	c.Infof("node selector: %q", nodeSelector)
 	if err != nil {
 		return trace.Wrap(err)
 	}

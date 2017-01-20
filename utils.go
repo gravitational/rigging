@@ -3,6 +3,7 @@ package rigging
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -166,15 +167,57 @@ func nodeSelector(spec *v1.PodSpec) labels.Selector {
 }
 
 func checkRunning(pods map[string]v1.Pod, nodes []v1.Node, entry *log.Entry) error {
+	ready, err := checkRunningAndReady(pods, nodes, entry)
+	if ready || err == errPodCompleted {
+		return nil
+	}
+	return trace.Wrap(err)
+}
+
+func checkRunningAndReady(pods map[string]v1.Pod, nodes []v1.Node, entry *log.Entry) (bool, error) {
 	for _, node := range nodes {
 		pod, ok := pods[node.Name]
 		if !ok {
-			return trace.NotFound("not found any pod on node %v", node.Name)
+			return false, trace.NotFound("no pod found on node %v", node.Name)
 		}
-		if pod.Status.Phase != v1.PodRunning {
-			return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
+		switch pod.Status.Phase {
+		case v1.PodFailed, v1.PodSucceeded:
+			entry.Infof("node %v: pod %v/%v is %q", node.Name, pod.Namespace, pod.Name, pod.Status.Phase)
+			return false, errPodCompleted
+		case v1.PodRunning:
+			ready := isPodReadyConditionTrue(pod.Status)
+			if ready {
+				entry.Infof("node %v: pod %v/%v is up and running", node.Name, pod.Namespace, pod.Name)
+			}
+			return ready, nil
+		default:
+			return false, trace.CompareFailed("pod %v/%v is not running yet, status: %q, ready: false",
+				pod.Namespace, pod.Name, pod.Status.Phase)
 		}
-		entry.Infof("node %v: pod %v is up and running", node.Name, pod.Name)
 	}
-	return nil
+	return false, trace.NotFound("no pods %v found on any nodes %v", pods, nodes)
+}
+
+// errPodCompleted is returned by checkRunningAndReady to indicate that
+// the pod has already reached completed state.
+var errPodCompleted = fmt.Errorf("pod ran to completion")
+
+// isPodReady retruns true if a pod is ready; false otherwise.
+func isPodReadyConditionTrue(status v1.PodStatus) bool {
+	_, condition := getPodCondition(&status, v1.PodReady)
+	return condition != nil && condition.Status == v1.ConditionTrue
+}
+
+// getPodCondition extracts the provided condition from the given status and returns that.
+// Returns nil and -1 if the condition is not present, and the index of the located condition.
+func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (int, *v1.PodCondition) {
+	if status == nil {
+		return -1, nil
+	}
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == conditionType {
+			return i, &status.Conditions[i]
+		}
+	}
+	return -1, nil
 }
