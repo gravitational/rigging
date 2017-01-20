@@ -341,7 +341,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return status(ctx, 1, 0, control.Status, control.Entry)
+	return control.Status(ctx, 1, 0)
 }
 
 func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
@@ -695,7 +695,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		"cs":  tr.String(),
 		"job": fmt.Sprintf("%v/%v", job.Namespace, job.Name),
 	})
-	g.Info("upsert job")
+	g.Infof("upsert job %v/%v", job.Namespace, job.Name)
 	jobs := cs.Client.Extensions().Jobs(job.Namespace)
 	currentJob, err := jobs.Get(job.Name)
 	err = convertErr(err)
@@ -724,7 +724,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		"cs": tr.String(),
 		"ds": fmt.Sprintf("%v/%v", ds.Namespace, ds.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert daemon set %v/%v", ds.Namespace, ds.Name)
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
 	err = convertErr(err)
@@ -753,7 +753,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		"cs": tr.String(),
 		"rc": fmt.Sprintf("%v/%v", rc.Namespace, rc.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert replication controller %v/%v", rc.Namespace, rc.Name)
 	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
 	currentRC, err := rcs.Get(rc.Name)
 	err = convertErr(err)
@@ -782,7 +782,7 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 		"cs":         tr.String(),
 		"deployment": fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert deployment %v/%v", deployment.Namespace, deployment.Name)
 	deployments := cs.Client.Extensions().Deployments(deployment.Namespace)
 	currentDeployment, err := deployments.Get(deployment.Name)
 	err = convertErr(err)
@@ -811,7 +811,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		"cs":      tr.String(),
 		"service": fmt.Sprintf("%v/%v", service.Namespace, service.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert service %v/%v", service.Namespace, service.Name)
 	services := cs.Client.Core().Services(service.Namespace)
 	currentService, err := services.Get(service.Name)
 	err = convertErr(err)
@@ -840,7 +840,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 		"cs":        tr.String(),
 		"configMap": fmt.Sprintf("%v/%v", configMap.Namespace, configMap.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert config map %v/%v", configMap.Namespace, configMap.Name)
 	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
 	currentConfigMap, err := configMaps.Get(configMap.Name)
 	err = convertErr(err)
@@ -869,7 +869,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 		"cs":     tr.String(),
 		"secret": fmt.Sprintf("%v/%v", secret.Namespace, secret.Name),
 	})
-	g.Infof("upsert")
+	g.Infof("upsert secret %v/%v", secret.Namespace, secret.Name)
 	secrets := cs.Client.Core().Secrets(secret.Namespace)
 	currentSecret, err := secrets.Get(secret.Name)
 	err = convertErr(err)

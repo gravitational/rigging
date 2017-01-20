@@ -72,7 +72,7 @@ func run() error {
 		cdeleteCascade           = cdelete.Flag("cascade", "Delete sub resouces, e.g. Pods for Daemonset").Default("true").Bool()
 		cdeleteChangeset         = Ref(cdelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
-		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource name to delete").Default(rigging.DefaultNamespace).String()
+		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource namespace").Default(rigging.DefaultNamespace).String()
 	)
 
 	cmd, err := app.Parse(os.Args[1:])
@@ -257,6 +257,19 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		updater, err := rigging.NewDSControl(rigging.DSConfig{
 			DaemonSet: ds,
 			Client:    client,
+		})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return updater.Status(ctx, retryAttempts, retryPeriod)
+	case rigging.KindDeployment:
+		deployment, err := client.Extensions().Deployments(namespace).Get(resource.Name)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		updater, err := rigging.NewDeploymentControl(rigging.DeploymentConfig{
+			Deployment: deployment,
+			Client:     client,
 		})
 		if err != nil {
 			return trace.Wrap(err)

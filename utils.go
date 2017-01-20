@@ -68,6 +68,18 @@ func FromStdIn(act action, data string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+func pollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duration, fn func() error, entry *log.Entry) error {
+	if retryAttempts == 0 {
+		retryAttempts = DefaultRetryAttempts
+	}
+	if retryPeriod == 0 {
+		retryPeriod = DefaultRetryPeriod
+	}
+	entry.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+
+	return retry(ctx, retryAttempts, retryPeriod, fn)
+}
+
 func collectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
@@ -143,18 +155,6 @@ func withRecover(fn func() error, recoverFn func() error) error {
 	}
 	shouldRecover = false
 	return nil
-}
-
-func status(ctx context.Context, retryAttempts int, retryPeriod time.Duration, fn func() error, entry *log.Entry) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	entry.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
-
-	return retry(ctx, retryAttempts, retryPeriod, fn)
 }
 
 func nodeSelector(spec *v1.PodSpec) labels.Selector {

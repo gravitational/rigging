@@ -17,6 +17,7 @@ package rigging
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gravitational/trace"
 
@@ -129,7 +130,11 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 	return nil
 }
 
-func (c *jobControl) Status() error {
+func (c *jobControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
+
+func (c *jobControl) status() error {
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	job, err := jobs.Get(c.job.Name)
 	if err != nil {

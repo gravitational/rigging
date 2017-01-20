@@ -131,30 +131,24 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 }
 
 func (c *DeploymentControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		rcs := c.Client.Extensions().Deployments(c.deployment.Namespace)
-		currentDeployment, err := rcs.Get(c.deployment.Name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		var replicas int32 = 1
-		if currentDeployment.Spec.Replicas != nil {
-			replicas = *(currentDeployment.Spec.Replicas)
-		}
-		if currentDeployment.Status.UpdatedReplicas != replicas {
-			return trace.CompareFailed("expected replicas: %v, updated: %v", replicas, currentDeployment.Status.UpdatedReplicas)
-		}
-		if currentDeployment.Status.AvailableReplicas != replicas {
-			return trace.CompareFailed("expected replicas: %v, available: %v", replicas, currentDeployment.Status.AvailableReplicas)
-		}
-		return nil
-	})
+func (c *DeploymentControl) status() error {
+	rcs := c.Client.Extensions().Deployments(c.deployment.Namespace)
+	currentDeployment, err := rcs.Get(c.deployment.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	var replicas int32 = 1
+	if currentDeployment.Spec.Replicas != nil {
+		replicas = *(currentDeployment.Spec.Replicas)
+	}
+	if currentDeployment.Status.UpdatedReplicas != replicas {
+		return trace.CompareFailed("expected replicas: %v, updated: %v", replicas, currentDeployment.Status.UpdatedReplicas)
+	}
+	if currentDeployment.Status.AvailableReplicas != replicas {
+		return trace.CompareFailed("expected replicas: %v, available: %v", replicas, currentDeployment.Status.AvailableReplicas)
+	}
+	return nil
 }
