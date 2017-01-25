@@ -16,9 +16,7 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -51,7 +49,7 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 		DSConfig:  config,
 		daemonSet: *ds,
 		Entry: log.WithFields(log.Fields{
-			"ds": fmt.Sprintf("%v/%v", Namespace(ds.Namespace), ds.Name),
+			"ds": formatMeta(ds.ObjectMeta),
 		}),
 	}, nil
 }
@@ -86,40 +84,19 @@ type DSControl struct {
 
 // collectPods returns pods created by this daemon set
 func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
-	set := make(labels.Set)
+	var labels map[string]string
 	if c.daemonSet.Spec.Selector != nil {
-		for key, val := range c.daemonSet.Spec.Selector.MatchLabels {
-			set[key] = val
-		}
+		labels = c.daemonSet.Spec.Selector.MatchLabels
 	}
-	pods := c.Client.Core().Pods(daemonSet.Namespace)
-	podList, err := pods.List(api.ListOptions{
-		LabelSelector: set.AsSelector(),
+	pods, err := collectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref api.ObjectReference) bool {
+		return ref.Kind == KindDaemonSet && ref.UID == daemonSet.UID
 	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	currentPods := make(map[string]v1.Pod, 0)
-	for _, pod := range podList.Items {
-		createdBy, ok := pod.Annotations[AnnotationCreatedBy]
-		if !ok {
-			continue
-		}
-		ref, err := ParseSerializedReference(strings.NewReader(createdBy))
-		if err != nil {
-			log.Warningf(trace.DebugReport(err))
-			continue
-		}
-		if ref.Reference.Kind == KindDaemonSet && ref.Reference.UID == daemonSet.UID {
-			currentPods[pod.Spec.NodeName] = pod
-			c.Infof("found pod created by this Daemon Set: %v", pod.Name)
-		}
-	}
-	return currentPods, nil
+	return pods, trace.Wrap(err)
 }
 
 func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.daemonSet.ObjectMeta))
+
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
@@ -149,7 +126,8 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *DSControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert")
+	c.Infof("upsert %v", formatMeta(c.daemonSet.ObjectMeta))
+
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	err = convertErr(err)
@@ -204,32 +182,25 @@ func (c *DSControl) nodeSelector() labels.Selector {
 }
 
 func (c *DSControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-		currentDS, err := daemons.Get(c.daemonSet.Name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		currentPods, err := c.collectPods(currentDS)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+func (c *DSControl) status() error {
+	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
+	currentDS, err := daemons.Get(c.daemonSet.Name)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	currentPods, err := c.collectPods(currentDS)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
-		nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
-			LabelSelector: c.nodeSelector(),
-		})
-		c.Infof("nodes: %v", c.nodeSelector())
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		return checkRunning(currentPods, nodes.Items, c.Entry)
+	nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
+		LabelSelector: c.nodeSelector(),
 	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return checkRunning(currentPods, nodes.Items, c.Entry)
 }

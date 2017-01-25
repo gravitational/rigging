@@ -3,7 +3,9 @@ package rigging
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -13,6 +15,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/errors"
+	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/labels"
 )
@@ -68,6 +72,18 @@ func FromStdIn(act action, data string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+func pollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duration, fn func() error, entry *log.Entry) error {
+	if retryAttempts == 0 {
+		retryAttempts = DefaultRetryAttempts
+	}
+	if retryPeriod == 0 {
+		retryPeriod = DefaultRetryPeriod
+	}
+	entry.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+
+	return retry(ctx, retryAttempts, retryPeriod, fn)
+}
+
 func collectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
@@ -97,7 +113,7 @@ func collectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 
 		if fn(ref.Reference) {
 			pods[pod.Spec.NodeName] = pod
-			entry.Infof("found pod: %v", pod.Name)
+			entry.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta), pod.Spec.NodeName)
 		}
 	}
 	return pods, nil
@@ -145,18 +161,6 @@ func withRecover(fn func() error, recoverFn func() error) error {
 	return nil
 }
 
-func status(ctx context.Context, retryAttempts int, retryPeriod time.Duration, fn func() error, entry *log.Entry) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	entry.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
-
-	return retry(ctx, retryAttempts, retryPeriod, fn)
-}
-
 func nodeSelector(spec *v1.PodSpec) labels.Selector {
 	set := make(labels.Set)
 	for key, val := range spec.NodeSelector {
@@ -166,15 +170,79 @@ func nodeSelector(spec *v1.PodSpec) labels.Selector {
 }
 
 func checkRunning(pods map[string]v1.Pod, nodes []v1.Node, entry *log.Entry) error {
+	ready, err := checkRunningAndReady(pods, nodes, entry)
+	if ready || err == errPodCompleted {
+		return nil
+	}
+	return trace.Wrap(err)
+}
+
+func checkRunningAndReady(pods map[string]v1.Pod, nodes []v1.Node, entry *log.Entry) (bool, error) {
 	for _, node := range nodes {
 		pod, ok := pods[node.Name]
 		if !ok {
-			return trace.NotFound("not found any pod on node %v", node.Name)
+			entry.Infof("no pod found on node %v", node.Name)
+			return false, trace.NotFound("no pod found on node %v", node.Name)
 		}
-		if pod.Status.Phase != v1.PodRunning {
-			return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
+		meta := formatMeta(pod.ObjectMeta)
+		switch pod.Status.Phase {
+		case v1.PodFailed, v1.PodSucceeded:
+			entry.Infof("node %v: pod %v is %q", node.Name, meta, pod.Status.Phase)
+			return false, errPodCompleted
+		case v1.PodRunning:
+			ready := isPodReadyConditionTrue(pod.Status)
+			if ready {
+				entry.Infof("node %v: pod %v is up and running", node.Name, meta)
+			}
+			return ready, nil
+		default:
+			return false, trace.CompareFailed("pod %v is not running yet, status: %q, ready: false",
+				meta, pod.Status.Phase)
 		}
-		entry.Infof("node %v: pod %v is up and running", node.Name, pod.Name)
 	}
-	return nil
+	return false, trace.NotFound("no pods %v found on any nodes %v", pods, nodes)
+}
+
+// errPodCompleted is returned by checkRunningAndReady to indicate that
+// the pod has already reached completed state.
+var errPodCompleted = fmt.Errorf("pod ran to completion")
+
+// isPodReady retruns true if a pod is ready; false otherwise.
+func isPodReadyConditionTrue(status v1.PodStatus) bool {
+	_, condition := getPodCondition(&status, v1.PodReady)
+	return condition != nil && condition.Status == v1.ConditionTrue
+}
+
+// getPodCondition extracts the provided condition from the given status and returns that.
+// Returns nil and -1 if the condition is not present, and the index of the located condition.
+func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (int, *v1.PodCondition) {
+	if status == nil {
+		return -1, nil
+	}
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == conditionType {
+			return i, &status.Conditions[i]
+		}
+	}
+	return -1, nil
+}
+
+func convertErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	se, ok := err.(*errors.StatusError)
+	if !ok {
+		return err
+	}
+
+	format, args := se.DebugError()
+	status := se.Status()
+	switch {
+	case status.Code == http.StatusConflict && status.Reason == unversioned.StatusReasonAlreadyExists:
+		return trace.AlreadyExists("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	case status.Code == http.StatusNotFound:
+		return trace.NotFound("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	}
+	return err
 }

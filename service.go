@@ -16,7 +16,6 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -46,7 +45,7 @@ func NewServiceControl(config ServiceConfig) (*ServiceControl, error) {
 		ServiceConfig: config,
 		service:       *rc,
 		Entry: log.WithFields(log.Fields{
-			"service": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+			"service": formatMeta(rc.ObjectMeta),
 		}),
 	}, nil
 }
@@ -80,13 +79,15 @@ type ServiceControl struct {
 }
 
 func (c *ServiceControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.service.ObjectMeta))
+
 	err := c.Client.Core().Services(c.service.Namespace).Delete(c.service.Name, nil)
 	return convertErr(err)
 }
 
 func (c *ServiceControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert")
+	c.Infof("upsert %v", formatMeta(c.service.ObjectMeta))
+
 	services := c.Client.Core().Services(c.service.Namespace)
 	currentService, err := services.Get(c.service.Name)
 	err = convertErr(err)
@@ -107,20 +108,11 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 }
 
 func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		services := c.Client.Core().Services(c.service.Namespace)
-		_, err := services.Get(c.service.Name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		return nil
-	})
+func (c *ServiceControl) status() error {
+	services := c.Client.Core().Services(c.service.Namespace)
+	_, err := services.Get(c.service.Name)
+	return trace.Wrap(err)
 }

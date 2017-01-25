@@ -16,7 +16,6 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -46,7 +45,7 @@ func NewConfigMapControl(config ConfigMapConfig) (*ConfigMapControl, error) {
 		ConfigMapConfig: config,
 		configMap:       *rc,
 		Entry: log.WithFields(log.Fields{
-			"configMap": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+			"configMap": formatMeta(rc.ObjectMeta),
 		}),
 	}, nil
 }
@@ -80,13 +79,15 @@ type ConfigMapControl struct {
 }
 
 func (c *ConfigMapControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.configMap.ObjectMeta))
+
 	err := c.Client.Core().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name, nil)
 	return convertErr(err)
 }
 
 func (c *ConfigMapControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert")
+	c.Infof("upsert %v", formatMeta(c.configMap.ObjectMeta))
+
 	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
 	c.configMap.UID = ""
 	c.configMap.SelfLink = ""
@@ -105,20 +106,11 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 }
 
 func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
-		_, err := configMaps.Get(c.configMap.Name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		return nil
-	})
+func (c *ConfigMapControl) status() error {
+	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
+	_, err := configMaps.Get(c.configMap.Name)
+	return trace.Wrap(err)
 }
