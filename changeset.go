@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"reflect"
 	"strings"
 	"time"
@@ -30,7 +29,6 @@ import (
 	"github.com/gravitational/trace"
 	"k8s.io/client-go/1.4/kubernetes"
 	api "k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/errors"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
@@ -121,7 +119,7 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		return trace.Wrap(err)
 	}
 	if tr.Spec.Status != ChangesetStatusInProgress {
-		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
+		return trace.CompareFailed("cannot update changeset - expected status %q, got %q", ChangesetStatusInProgress, tr.Spec.Status)
 	}
 	var kind unversioned.TypeMeta
 	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
@@ -223,12 +221,12 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return trace.Wrap(err)
 	}
 	if tr.Spec.Status != ChangesetStatusInProgress {
-		return trace.CompareFailed("can't update changeset that is not in state '%v'", ChangesetStatusInProgress)
+		return trace.CompareFailed("cannot update changeset - expected status %q, got %q", ChangesetStatusInProgress, tr.Spec.Status)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
 	})
-	g.Infof("deleting %v from %v", resource, resourceNamespace)
+	log.Infof("deleting %v/%s", resourceNamespace, resource)
 	switch resource.Kind {
 	case KindDaemonSet:
 		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
@@ -245,7 +243,7 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	case KindService:
 		return cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
-	return trace.BadParameter("don't know how to delete %v yet", resource.Kind)
+	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
 
 // Freeze "freezes" changeset, prohibits adding or removing any changes to it
@@ -277,14 +275,13 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	if tr.Spec.Status == ChangesetStatusReverted {
 		return trace.CompareFailed("changeset is already reverted")
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
 	})
-	g.Info("reverting")
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
 		if op.Status != OpStatusCompleted {
-			g.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
+			log.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
 		}
 		if err := cs.revert(ctx, op); err != nil {
 			return trace.Wrap(err)
@@ -512,6 +509,7 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
 			return trace.Wrap(err)
 		}
 	}
+
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
@@ -691,11 +689,11 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs":  tr.String(),
 		"job": fmt.Sprintf("%v/%v", job.Namespace, job.Name),
 	})
-	g.Infof("upsert job %v/%v", job.Namespace, job.Name)
+	log.Infof("upsert job %v", formatMeta(job.ObjectMeta))
 	jobs := cs.Client.Extensions().Jobs(job.Namespace)
 	currentJob, err := jobs.Get(job.Name)
 	err = convertErr(err)
@@ -703,7 +701,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Info("existing job is not found")
+		log.Info("existing job not found")
 		currentJob = nil
 	}
 	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
@@ -720,11 +718,11 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
 		"ds": fmt.Sprintf("%v/%v", ds.Namespace, ds.Name),
 	})
-	g.Infof("upsert daemon set %v/%v", ds.Namespace, ds.Name)
+	log.Infof("upsert daemon set %v", formatMeta(ds.ObjectMeta))
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
 	err = convertErr(err)
@@ -732,7 +730,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing daemonset is not found")
+		log.Infof("existing daemonset not found")
 		currentDS = nil
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
@@ -749,11 +747,11 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
 		"rc": fmt.Sprintf("%v/%v", rc.Namespace, rc.Name),
 	})
-	g.Infof("upsert replication controller %v/%v", rc.Namespace, rc.Name)
+	log.Infof("upsert replication controller %v", formatMeta(rc.ObjectMeta))
 	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
 	currentRC, err := rcs.Get(rc.Name)
 	err = convertErr(err)
@@ -761,7 +759,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing RC not found")
+		log.Infof("existing replication controller not found")
 		currentRC = nil
 	}
 	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
@@ -778,11 +776,11 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs":         tr.String(),
 		"deployment": fmt.Sprintf("%v/%v", deployment.Namespace, deployment.Name),
 	})
-	g.Infof("upsert deployment %v/%v", deployment.Namespace, deployment.Name)
+	log.Infof("upsert deployment %v", formatMeta(deployment.ObjectMeta))
 	deployments := cs.Client.Extensions().Deployments(deployment.Namespace)
 	currentDeployment, err := deployments.Get(deployment.Name)
 	err = convertErr(err)
@@ -790,7 +788,7 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing Deployment not found")
+		log.Infof("existing deployment not found")
 		currentDeployment = nil
 	}
 	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
@@ -807,11 +805,11 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs":      tr.String(),
 		"service": fmt.Sprintf("%v/%v", service.Namespace, service.Name),
 	})
-	g.Infof("upsert service %v/%v", service.Namespace, service.Name)
+	log.Infof("upsert service %v", formatMeta(service.ObjectMeta))
 	services := cs.Client.Core().Services(service.Namespace)
 	currentService, err := services.Get(service.Name)
 	err = convertErr(err)
@@ -819,7 +817,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing Service not found")
+		log.Infof("existing service not found")
 		currentService = nil
 	}
 	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
@@ -836,11 +834,11 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs":        tr.String(),
 		"configMap": fmt.Sprintf("%v/%v", configMap.Namespace, configMap.Name),
 	})
-	g.Infof("upsert config map %v/%v", configMap.Namespace, configMap.Name)
+	log.Infof("upsert configmap %v", formatMeta(configMap.ObjectMeta))
 	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
 	currentConfigMap, err := configMaps.Get(configMap.Name)
 	err = convertErr(err)
@@ -848,7 +846,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing ConfigMap not found")
+		log.Infof("existing configmap not found")
 		currentConfigMap = nil
 	}
 	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
@@ -865,11 +863,11 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	g := log.WithFields(log.Fields{
+	log := log.WithFields(log.Fields{
 		"cs":     tr.String(),
 		"secret": fmt.Sprintf("%v/%v", secret.Namespace, secret.Name),
 	})
-	g.Infof("upsert secret %v/%v", secret.Namespace, secret.Name)
+	log.Infof("upsert secret %v", formatMeta(secret.ObjectMeta))
 	secrets := cs.Client.Core().Secrets(secret.Namespace)
 	currentSecret, err := secrets.Get(secret.Name)
 	err = convertErr(err)
@@ -877,7 +875,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		g.Infof("existing Secret not found")
+		log.Infof("existing secret not found")
 		currentSecret = nil
 	}
 	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
@@ -952,6 +950,7 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
+		log.Errorf("failed to create changeset resource from\n%s", data)
 		return nil, convertErr(err)
 	}
 	var result ChangesetResource
@@ -1039,21 +1038,4 @@ func (cs *Changeset) list(namespace string) (*ChangesetList, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &result, nil
-}
-
-func convertErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	se, ok := err.(*errors.StatusError)
-	if !ok {
-		return err
-	}
-	if se.Status().Code == http.StatusConflict && se.Status().Reason == unversioned.StatusReasonAlreadyExists {
-		return trace.AlreadyExists(err.Error())
-	}
-	if se.Status().Code == http.StatusNotFound {
-		return trace.NotFound(err.Error())
-	}
-	return err
 }

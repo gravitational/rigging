@@ -16,7 +16,6 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -46,7 +45,7 @@ func NewSecretControl(config SecretConfig) (*SecretControl, error) {
 		SecretConfig: config,
 		secret:       *rc,
 		Entry: log.WithFields(log.Fields{
-			"secret": fmt.Sprintf("%v/%v", Namespace(rc.Namespace), rc.Name),
+			"secret": formatMeta(rc.ObjectMeta),
 		}),
 	}, nil
 }
@@ -80,13 +79,15 @@ type SecretControl struct {
 }
 
 func (c *SecretControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.secret.ObjectMeta))
+
 	err := c.Client.Core().Secrets(c.secret.Namespace).Delete(c.secret.Name, nil)
 	return convertErr(err)
 }
 
 func (c *SecretControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert")
+	c.Infof("upsert %v", formatMeta(c.secret.ObjectMeta))
+
 	secrets := c.Client.Core().Secrets(c.secret.Namespace)
 	c.secret.UID = ""
 	c.secret.SelfLink = ""
@@ -105,20 +106,11 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 }
 
 func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
-	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
-	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
+}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		secrets := c.Client.Core().Secrets(c.secret.Namespace)
-		_, err := secrets.Get(c.secret.Name)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		return nil
-	})
+func (c *SecretControl) status() error {
+	secrets := c.Client.Core().Secrets(c.secret.Namespace)
+	_, err := secrets.Get(c.secret.Name)
+	return trace.Wrap(err)
 }

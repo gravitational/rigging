@@ -16,7 +16,6 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -50,7 +49,7 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 		DSConfig:  config,
 		daemonSet: *ds,
 		Entry: log.WithFields(log.Fields{
-			"ds": fmt.Sprintf("%v/%v", Namespace(ds.Namespace), ds.Name),
+			"ds": formatMeta(ds.ObjectMeta),
 		}),
 	}, nil
 }
@@ -96,7 +95,8 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 }
 
 func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.daemonSet.ObjectMeta))
+
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
@@ -126,7 +126,8 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *DSControl) Upsert(ctx context.Context) error {
-	c.Info("Upsert")
+	c.Infof("upsert %v", formatMeta(c.daemonSet.ObjectMeta))
+
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	err = convertErr(err)
@@ -198,7 +199,6 @@ func (c *DSControl) status() error {
 	nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
 		LabelSelector: c.nodeSelector(),
 	})
-	c.Infof("node selector: %v", c.nodeSelector())
 	if err != nil {
 		return trace.Wrap(err)
 	}

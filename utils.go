@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/errors"
+	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/labels"
 )
@@ -110,7 +113,7 @@ func collectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 
 		if fn(ref.Reference) {
 			pods[pod.Spec.NodeName] = pod
-			entry.Infof("found pod: %v", pod.Name)
+			entry.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta), pod.Spec.NodeName)
 		}
 	}
 	return pods, nil
@@ -178,21 +181,23 @@ func checkRunningAndReady(pods map[string]v1.Pod, nodes []v1.Node, entry *log.En
 	for _, node := range nodes {
 		pod, ok := pods[node.Name]
 		if !ok {
+			entry.Infof("no pod found on node %v", node.Name)
 			return false, trace.NotFound("no pod found on node %v", node.Name)
 		}
+		meta := formatMeta(pod.ObjectMeta)
 		switch pod.Status.Phase {
 		case v1.PodFailed, v1.PodSucceeded:
-			entry.Infof("node %v: pod %v/%v is %q", node.Name, pod.Namespace, pod.Name, pod.Status.Phase)
+			entry.Infof("node %v: pod %v is %q", node.Name, meta, pod.Status.Phase)
 			return false, errPodCompleted
 		case v1.PodRunning:
 			ready := isPodReadyConditionTrue(pod.Status)
 			if ready {
-				entry.Infof("node %v: pod %v/%v is up and running", node.Name, pod.Namespace, pod.Name)
+				entry.Infof("node %v: pod %v is up and running", node.Name, meta)
 			}
 			return ready, nil
 		default:
-			return false, trace.CompareFailed("pod %v/%v is not running yet, status: %q, ready: false",
-				pod.Namespace, pod.Name, pod.Status.Phase)
+			return false, trace.CompareFailed("pod %v is not running yet, status: %q, ready: false",
+				meta, pod.Status.Phase)
 		}
 	}
 	return false, trace.NotFound("no pods %v found on any nodes %v", pods, nodes)
@@ -220,4 +225,24 @@ func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (i
 		}
 	}
 	return -1, nil
+}
+
+func convertErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	se, ok := err.(*errors.StatusError)
+	if !ok {
+		return err
+	}
+
+	format, args := se.DebugError()
+	status := se.Status()
+	switch {
+	case status.Code == http.StatusConflict && status.Reason == unversioned.StatusReasonAlreadyExists:
+		return trace.AlreadyExists("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	case status.Code == http.StatusNotFound:
+		return trace.NotFound("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	}
+	return err
 }

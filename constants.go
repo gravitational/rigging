@@ -1,7 +1,10 @@
 package rigging
 
 import (
+	"fmt"
 	"time"
+
+	"k8s.io/client-go/1.4/pkg/api/v1"
 )
 
 const (
@@ -34,10 +37,15 @@ const (
 	DefaultBufferSize  = 1024
 )
 
-// Namespace sets default namespace if in is empty
-func Namespace(in string) string {
-	if in == "" {
+// NamespaceOrDefault returns a default namespace if the specified namespace is empty
+func Namespace(namespace string) string {
+	if namespace == "" {
 		return DefaultNamespace
 	}
-	return in
+	return namespace
+}
+
+// formatMeta formats this meta as text
+func formatMeta(meta v1.ObjectMeta) string {
+	return fmt.Sprintf("%v/%v", Namespace(meta.Namespace), meta.Name)
 }

@@ -16,7 +16,6 @@ package rigging
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -38,13 +37,13 @@ func newJobControl(config jobConfig) (*jobControl, error) {
 	return &jobControl{
 		jobConfig: config,
 		Entry: log.WithFields(log.Fields{
-			"job": fmt.Sprintf("%v/%v", Namespace(config.job.Namespace), config.job.Name),
+			"job": formatMeta(config.job.ObjectMeta),
 		}),
 	}, nil
 }
 
 func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
-	c.Info("Delete")
+	c.Infof("delete %v", formatMeta(c.job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
@@ -79,7 +78,7 @@ func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *jobControl) Upsert(ctx context.Context) error {
-	c.Info("Upsert")
+	c.Infof("upsert %v", formatMeta(c.job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
@@ -117,11 +116,11 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	c.Info("created successfully")
+	c.Info("job created successfully")
 	if currentJob != nil {
 		c.Info("deleting pods created by previous job")
 		for _, pod := range currentPods {
-			c.Infof("deleting pod %v", pod.Name)
+			c.Infof("deleting pod %v", formatMeta(pod.ObjectMeta))
 			if err := pods.Delete(pod.Name, nil); err != nil {
 				return trace.Wrap(err)
 			}
@@ -141,20 +140,27 @@ func (c *jobControl) status() error {
 		return trace.Wrap(err)
 	}
 
-	pods, err := c.collectPods(job)
-	if err != nil {
-		return trace.Wrap(err)
+	succeeded := job.Status.Succeeded
+	active := job.Status.Active
+	var complete bool
+	if job.Spec.Completions == nil {
+		// This type of job is complete when any pod exits with success
+		if succeeded > 0 && active == 0 {
+			complete = true
+		}
+	} else {
+		// Job specifies a number of completions
+		completions := *job.Spec.Completions
+		if succeeded >= completions {
+			complete = true
+		}
 	}
 
-	nodeSelector := nodeSelector(&c.job.Spec.Template.Spec)
-	nodes, err := c.Core().Nodes().List(api.ListOptions{
-		LabelSelector: nodeSelector,
-	})
-	c.Infof("node selector: %q", nodeSelector)
-	if err != nil {
-		return trace.Wrap(err)
+	if !complete {
+		return trace.CompareFailed("job %v not yet complete (succeeded: %v, active: %v)",
+			formatMeta(job.ObjectMeta), succeeded, active)
 	}
-	return checkRunning(pods, nodes.Items, c.Entry)
+	return nil
 }
 
 func (c *jobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
