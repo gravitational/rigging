@@ -109,7 +109,8 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 			APIVersion: ChangesetAPIVersion,
 		},
 		ObjectMeta: v1.ObjectMeta{
-			Name: changesetName,
+			Name:      changesetName,
+			Namespace: changesetNamespace,
 		},
 		Spec: ChangesetSpec{
 			Status: ChangesetStatusInProgress,
@@ -950,7 +951,7 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		log.Errorf("failed to create changeset resource from\n%s", data)
+		log.Errorf("failed to create changeset resource: %v\n%s", err, data)
 		return nil, convertErr(err)
 	}
 	var result ChangesetResource
