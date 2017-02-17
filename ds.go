@@ -85,8 +85,8 @@ type DSControl struct {
 // collectPods returns pods created by this daemon set
 func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
 	var labels map[string]string
-	if c.daemonSet.Spec.Selector != nil {
-		labels = c.daemonSet.Spec.Selector.MatchLabels
+	if daemonSet.Spec.Selector != nil {
+		labels = daemonSet.Spec.Selector.MatchLabels
 	}
 	pods, err := collectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref api.ObjectReference) bool {
 		return ref.Kind == KindDaemonSet && ref.UID == daemonSet.UID
