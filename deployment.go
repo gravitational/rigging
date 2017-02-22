@@ -85,7 +85,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	if cascade {
 		// scale deployment down to delete all replicas and pods
