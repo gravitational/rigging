@@ -27,28 +27,28 @@ import (
 	batchv1 "k8s.io/client-go/1.4/pkg/apis/batch/v1"
 )
 
-func newJobControl(config jobConfig) (*jobControl, error) {
+func NewJobControl(config JobConfig) (*JobControl, error) {
 	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	config.job.Kind = KindJob
-	return &jobControl{
-		jobConfig: config,
+	return &JobControl{
+		JobConfig: config,
 		Entry: log.WithFields(log.Fields{
 			"job": formatMeta(config.job.ObjectMeta),
 		}),
 	}, nil
 }
 
-func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
+func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 
 	pods := c.Core().Pods(c.job.Namespace)
@@ -60,7 +60,7 @@ func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Info("deleting current job")
 	err = jobs.Delete(c.job.Name, nil)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 
 	if !cascade {
@@ -71,13 +71,13 @@ func (c *jobControl) Delete(ctx context.Context, cascade bool) error {
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
-			return trace.Wrap(err)
+			return convertErr(err)
 		}
 	}
 	return nil
 }
 
-func (c *jobControl) Upsert(ctx context.Context) error {
+func (c *JobControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.job.Namespace)
@@ -103,7 +103,7 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 		c.Info("deleting current job")
 		err = jobs.Delete(c.job.Name, nil)
 		if err != nil {
-			return trace.Wrap(err)
+			return convertErr(err)
 		}
 	}
 
@@ -113,7 +113,7 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 	c.job.ResourceVersion = ""
 	_, err = jobs.Create(&c.job)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 
 	c.Info("job created successfully")
@@ -122,22 +122,22 @@ func (c *jobControl) Upsert(ctx context.Context) error {
 		for _, pod := range currentPods {
 			c.Infof("deleting pod %v", formatMeta(pod.ObjectMeta))
 			if err := pods.Delete(pod.Name, nil); err != nil {
-				return trace.Wrap(err)
+				return convertErr(err)
 			}
 		}
 	}
 	return nil
 }
 
-func (c *jobControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
+func (c *JobControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
 	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
 }
 
-func (c *jobControl) status() error {
+func (c *JobControl) status() error {
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	job, err := jobs.Get(c.job.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 
 	succeeded := job.Status.Succeeded
@@ -163,7 +163,7 @@ func (c *jobControl) status() error {
 	return nil
 }
 
-func (c *jobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
+func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if job.Spec.Selector != nil {
 		labels = job.Spec.Selector.MatchLabels
@@ -171,20 +171,20 @@ func (c *jobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	pods, err := collectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
-	return pods, trace.Wrap(err)
+	return pods, convertErr(err)
 }
 
-type jobControl struct {
-	jobConfig
+type JobControl struct {
+	JobConfig
 	*log.Entry
 }
 
-type jobConfig struct {
+type JobConfig struct {
 	job batchv1.Job
 	*kubernetes.Clientset
 }
 
-func (c *jobConfig) checkAndSetDefaults() error {
+func (c *JobConfig) checkAndSetDefaults() error {
 	if c.Clientset == nil {
 		return trace.BadParameter("missing parameter Clientset")
 	}

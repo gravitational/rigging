@@ -112,5 +112,5 @@ func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeri
 func (c *SecretControl) status() error {
 	secrets := c.Client.Core().Secrets(c.secret.Namespace)
 	_, err := secrets.Get(c.secret.Name)
-	return trace.Wrap(err)
+	return convertErr(err)
 }

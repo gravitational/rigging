@@ -82,25 +82,22 @@ type DeploymentControl struct {
 func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.deployment.ObjectMeta))
 
-	rcs := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := rcs.Get(c.deployment.Name)
+	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
+	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	if cascade {
 		// scale deployment down to delete all replicas and pods
 		var replicas int32
 		currentDeployment.Spec.Replicas = &replicas
-		currentDeployment, err = rcs.Update(currentDeployment)
+		currentDeployment, err = deployments.Update(currentDeployment)
 		if err != nil {
 			return convertErr(err)
 		}
 	}
-	err = rcs.Delete(c.deployment.Name, nil)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	return nil
+	err = deployments.Delete(c.deployment.Name, nil)
+	return convertErr(err)
 }
 
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
@@ -136,10 +133,10 @@ func (c *DeploymentControl) Status(ctx context.Context, retryAttempts int, retry
 }
 
 func (c *DeploymentControl) status() error {
-	rcs := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := rcs.Get(c.deployment.Name)
+	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
+	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return convertErr(err)
 	}
 	var replicas int32 = 1
 	if currentDeployment.Spec.Replicas != nil {
@@ -152,7 +149,7 @@ func (c *DeploymentControl) status() error {
 	}
 	if currentDeployment.Status.AvailableReplicas != replicas {
 		return trace.CompareFailed("deployment %v not successful: expected replicas: %v, available: %v",
-			deployment, currentDeployment.Status.AvailableReplicas)
+			deployment, replicas, currentDeployment.Status.AvailableReplicas)
 	}
 	return nil
 }

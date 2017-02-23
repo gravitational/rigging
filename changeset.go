@@ -70,7 +70,7 @@ func NewChangeset(config ChangesetConfig) (*Changeset, error) {
 
 	clt, err := rest.RESTClientFor(&cfg)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, convertErr(err)
 	}
 	return &Changeset{ChangesetConfig: config, client: clt}, nil
 }
@@ -109,7 +109,8 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 			APIVersion: ChangesetAPIVersion,
 		},
 		ObjectMeta: v1.ObjectMeta{
-			Name: changesetName,
+			Name:      changesetName,
+			Namespace: changesetNamespace,
 		},
 		Spec: ChangesetSpec{
 			Status: ChangesetStatusInProgress,
@@ -211,7 +212,8 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 			APIVersion: ChangesetAPIVersion,
 		},
 		ObjectMeta: v1.ObjectMeta{
-			Name: changesetName,
+			Name:      changesetName,
+			Namespace: changesetNamespace,
 		},
 		Spec: ChangesetSpec{
 			Status: ChangesetStatusInProgress,
@@ -334,7 +336,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -423,7 +425,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 	if err != nil {
 		return convertErr(err)
 	}
-	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -557,7 +559,7 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -704,7 +706,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		log.Info("existing job not found")
 		currentJob = nil
 	}
-	control, err := newJobControl(jobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -888,7 +890,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 }
 
 func (cs *Changeset) Init(ctx context.Context) error {
-	log.Infof("Changeset init")
+	log.Info("changeset init")
 	tpr := &v1beta1.ThirdPartyResource{
 		ObjectMeta: v1.ObjectMeta{
 			Name: ChangesetResourceName,
@@ -950,7 +952,7 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		log.Errorf("failed to create changeset resource from\n%s", data)
+		log.Errorf("failed to create changeset resource: %v\n%s", err, data)
 		return nil, convertErr(err)
 	}
 	var result ChangesetResource

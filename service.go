@@ -114,5 +114,5 @@ func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPer
 func (c *ServiceControl) status() error {
 	services := c.Client.Core().Services(c.service.Namespace)
 	_, err := services.Get(c.service.Name)
-	return trace.Wrap(err)
+	return convertErr(err)
 }
