@@ -55,7 +55,7 @@ rig cs delete change1
 
 The following resources are supported:
 
-* ConifgMap
+* ConfigMap
 * DaemonSet
 * ReplicationController
 * Service
