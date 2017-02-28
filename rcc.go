@@ -153,13 +153,13 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	c.replicationController.SelfLink = ""
 	c.replicationController.ResourceVersion = ""
 	currentRC, err := rcs.Get(c.replicationController.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
 		_, err = rcs.Create(&c.replicationController)
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	// delete all pods and the old replication controller
 	control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
@@ -168,7 +168,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 	_, err = rcs.Create(&c.replicationController)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *RCControl) nodeSelector() labels.Selector {

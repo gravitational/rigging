@@ -85,7 +85,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	if cascade {
 		// scale deployment down to delete all replicas and pods
@@ -93,11 +93,11 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 		currentDeployment.Spec.Replicas = &replicas
 		currentDeployment, err = deployments.Update(currentDeployment)
 		if err != nil {
-			return convertErr(err)
+			return ConvertError(err)
 		}
 	}
 	err = deployments.Delete(c.deployment.Name, nil)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
@@ -108,16 +108,16 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.deployment.SelfLink = ""
 	c.deployment.ResourceVersion = ""
 	_, err := deployments.Get(c.deployment.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
 		_, err = deployments.Create(&c.deployment)
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	_, err = deployments.Update(&c.deployment)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *DeploymentControl) nodeSelector() labels.Selector {
@@ -136,7 +136,7 @@ func (c *DeploymentControl) status() error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	var replicas int32 = 1
 	if currentDeployment.Spec.Replicas != nil {

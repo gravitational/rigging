@@ -130,7 +130,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)

@@ -82,7 +82,7 @@ func (c *ServiceControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.service.ObjectMeta))
 
 	err := c.Client.Core().Services(c.service.Namespace).Delete(c.service.Name, nil)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *ServiceControl) Upsert(ctx context.Context) error {
@@ -90,7 +90,7 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 
 	services := c.Client.Core().Services(c.service.Namespace)
 	currentService, err := services.Get(c.service.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
@@ -99,12 +99,12 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 		c.service.SelfLink = ""
 		c.service.ResourceVersion = ""
 		_, err = services.Create(&c.service)
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	c.service.Spec.ClusterIP = currentService.Spec.ClusterIP
 	c.service.ResourceVersion = currentService.ResourceVersion
 	_, err = services.Update(&c.service)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
@@ -114,5 +114,5 @@ func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPer
 func (c *ServiceControl) status() error {
 	services := c.Client.Core().Services(c.service.Namespace)
 	_, err := services.Get(c.service.Name)
-	return convertErr(err)
+	return ConvertError(err)
 }

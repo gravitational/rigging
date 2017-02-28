@@ -82,7 +82,7 @@ func (c *SecretControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.secret.ObjectMeta))
 
 	err := c.Client.Core().Secrets(c.secret.Namespace).Delete(c.secret.Name, nil)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *SecretControl) Upsert(ctx context.Context) error {
@@ -93,16 +93,16 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 	c.secret.SelfLink = ""
 	c.secret.ResourceVersion = ""
 	_, err := secrets.Get(c.secret.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
 		_, err = secrets.Create(&c.secret)
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	_, err = secrets.Update(&c.secret)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
@@ -112,5 +112,5 @@ func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeri
 func (c *SecretControl) status() error {
 	secrets := c.Client.Core().Secrets(c.secret.Namespace)
 	_, err := secrets.Get(c.secret.Name)
-	return convertErr(err)
+	return ConvertError(err)
 }

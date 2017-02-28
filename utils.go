@@ -227,7 +227,7 @@ func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (i
 	return -1, nil
 }
 
-func convertErr(err error) error {
+func ConvertError(err error) error {
 	if err == nil {
 		return nil
 	}
