@@ -243,6 +243,8 @@ func convertErr(err error) error {
 		return trace.AlreadyExists("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
 	case status.Code == http.StatusNotFound:
 		return trace.NotFound("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	case status.Code == http.StatusForbidden:
+		return trace.AccessDenied("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
 	}
 	return err
 }
