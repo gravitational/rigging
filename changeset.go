@@ -70,7 +70,7 @@ func NewChangeset(config ChangesetConfig) (*Changeset, error) {
 
 	clt, err := rest.RESTClientFor(&cfg)
 	if err != nil {
-		return nil, convertErr(err)
+		return nil, ConvertError(err)
 	}
 	return &Changeset{ChangesetConfig: config, client: clt}, nil
 }
@@ -409,7 +409,7 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
 	if err != nil {
@@ -423,7 +423,7 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
@@ -437,7 +437,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
@@ -451,7 +451,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
@@ -465,7 +465,7 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
@@ -479,7 +479,7 @@ func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, n
 func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
@@ -493,7 +493,7 @@ func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource,
 func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
@@ -698,7 +698,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 	log.Infof("upsert job %v", formatMeta(job.ObjectMeta))
 	jobs := cs.Client.Extensions().Jobs(job.Namespace)
 	currentJob, err := jobs.Get(job.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -727,7 +727,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 	log.Infof("upsert daemon set %v", formatMeta(ds.ObjectMeta))
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -756,7 +756,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 	log.Infof("upsert replication controller %v", formatMeta(rc.ObjectMeta))
 	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
 	currentRC, err := rcs.Get(rc.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -785,7 +785,7 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 	log.Infof("upsert deployment %v", formatMeta(deployment.ObjectMeta))
 	deployments := cs.Client.Extensions().Deployments(deployment.Namespace)
 	currentDeployment, err := deployments.Get(deployment.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -814,7 +814,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 	log.Infof("upsert service %v", formatMeta(service.ObjectMeta))
 	services := cs.Client.Core().Services(service.Namespace)
 	currentService, err := services.Get(service.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -843,7 +843,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 	log.Infof("upsert configmap %v", formatMeta(configMap.ObjectMeta))
 	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
 	currentConfigMap, err := configMaps.Get(configMap.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -872,7 +872,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 	log.Infof("upsert secret %v", formatMeta(secret.ObjectMeta))
 	secrets := cs.Client.Core().Secrets(secret.Namespace)
 	currentSecret, err := secrets.Get(secret.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
@@ -901,7 +901,7 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		Description: "Changeset",
 	}
 	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {
 			return trace.Wrap(err)
@@ -953,7 +953,7 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Into(&raw)
 	if err != nil {
 		log.Errorf("failed to create changeset resource: %v\n%s", err, data)
-		return nil, convertErr(err)
+		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
@@ -969,7 +969,7 @@ func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return nil, convertErr(err)
+		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
@@ -999,7 +999,7 @@ func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	return nil
 }
@@ -1017,7 +1017,7 @@ func (cs *Changeset) update(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return nil, convertErr(err)
+		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {
@@ -1033,7 +1033,7 @@ func (cs *Changeset) list(namespace string) (*ChangesetList, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return nil, convertErr(err)
+		return nil, ConvertError(err)
 	}
 	var result ChangesetList
 	if err := json.Unmarshal(raw.Raw, &result); err != nil {

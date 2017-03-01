@@ -82,7 +82,7 @@ func (c *ConfigMapControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.configMap.ObjectMeta))
 
 	err := c.Client.Core().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name, nil)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *ConfigMapControl) Upsert(ctx context.Context) error {
@@ -93,16 +93,16 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 	c.configMap.SelfLink = ""
 	c.configMap.ResourceVersion = ""
 	_, err := configMaps.Get(c.configMap.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
 		_, err = configMaps.Create(&c.configMap)
-		return convertErr(err)
+		return ConvertError(err)
 	}
 	_, err = configMaps.Update(&c.configMap)
-	return convertErr(err)
+	return ConvertError(err)
 }
 
 func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {

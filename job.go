@@ -48,7 +48,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 
 	pods := c.Core().Pods(c.job.Namespace)
@@ -60,7 +60,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Info("deleting current job")
 	err = jobs.Delete(c.job.Name, nil)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 
 	if !cascade {
@@ -71,7 +71,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
-			return convertErr(err)
+			return ConvertError(err)
 		}
 	}
 	return nil
@@ -82,7 +82,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	currentJob, err := jobs.Get(c.job.Name)
-	err = convertErr(err)
+	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
@@ -103,7 +103,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		c.Info("deleting current job")
 		err = jobs.Delete(c.job.Name, nil)
 		if err != nil {
-			return convertErr(err)
+			return ConvertError(err)
 		}
 	}
 
@@ -113,7 +113,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	c.job.ResourceVersion = ""
 	_, err = jobs.Create(&c.job)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 
 	c.Info("job created successfully")
@@ -122,7 +122,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		for _, pod := range currentPods {
 			c.Infof("deleting pod %v", formatMeta(pod.ObjectMeta))
 			if err := pods.Delete(pod.Name, nil); err != nil {
-				return convertErr(err)
+				return ConvertError(err)
 			}
 		}
 	}
@@ -137,7 +137,7 @@ func (c *JobControl) status() error {
 	jobs := c.Batch().Jobs(c.job.Namespace)
 	job, err := jobs.Get(c.job.Name)
 	if err != nil {
-		return convertErr(err)
+		return ConvertError(err)
 	}
 
 	succeeded := job.Status.Succeeded
@@ -171,7 +171,7 @@ func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	pods, err := collectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
-	return pods, convertErr(err)
+	return pods, ConvertError(err)
 }
 
 type JobControl struct {

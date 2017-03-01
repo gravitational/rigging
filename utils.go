@@ -227,7 +227,7 @@ func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (i
 	return -1, nil
 }
 
-func convertErr(err error) error {
+func ConvertError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -243,6 +243,8 @@ func convertErr(err error) error {
 		return trace.AlreadyExists("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
 	case status.Code == http.StatusNotFound:
 		return trace.NotFound("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+	case status.Code == http.StatusForbidden:
+		return trace.AccessDenied("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
 	}
 	return err
 }
