@@ -165,8 +165,6 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	case ChangesetStatusCommitted:
 		// Nothing to do
 		return nil
-	case ChangesetStatusReverted:
-		return trace.CompareFailed("changeset has been reverted")
 	}
 
 	if retryAttempts == 0 {
@@ -178,20 +176,20 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	}
 
 	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		for i, op := range tr.Spec.Items {
+		for _, op := range tr.Spec.Items {
 			switch op.Status {
-			case OpStatusReverted:
-				log.Infof("%v is rolled back, skip status check", i)
-				continue
 			case OpStatusCreated:
 				return trace.BadParameter("%v is not completed yet", tr)
-			case OpStatusCompleted:
+			case OpStatusCompleted, OpStatusReverted:
 				if op.To != "" {
-					if err := cs.status(ctx, []byte(op.To)); err != nil {
-						return trace.Wrap(err)
+					err := cs.status(ctx, []byte(op.To))
+					if err != nil {
+						if op.Status != OpStatusReverted || !trace.IsNotFound(err) {
+							return trace.Wrap(err)
+						}
 					}
 				} else {
-					log.Infof("%v has deleted resource, nothing to check", i)
+					log.Debugf("%v has deleted resource, nothing to check", op)
 				}
 			default:
 				return trace.BadParameter("unsupported operation status: %v", op.Status)
