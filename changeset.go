@@ -103,19 +103,7 @@ func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetNa
 }
 
 func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
-	tr, err := cs.createOrRead(&ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindChangeset,
-			APIVersion: ChangesetAPIVersion,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name:      changesetName,
-			Namespace: changesetNamespace,
-		},
-		Spec: ChangesetSpec{
-			Status: ChangesetStatusInProgress,
-		},
-	})
+	tr, err := cs.createOrRead(changesetNamespace, changesetName, ChangesetSpec{Status: ChangesetStatusInProgress})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -204,19 +192,7 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	if err := cs.Init(ctx); err != nil {
 		return trace.Wrap(err)
 	}
-	tr, err := cs.createOrRead(&ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindChangeset,
-			APIVersion: ChangesetAPIVersion,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name:      changesetName,
-			Namespace: changesetNamespace,
-		},
-		Spec: ChangesetSpec{
-			Status: ChangesetStatusInProgress,
-		},
-	})
+	tr, err := cs.createOrRead(changesetNamespace, changesetName, ChangesetSpec{Status: ChangesetStatusInProgress})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -928,6 +904,13 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 	return cs.list(namespace)
 }
 
+// CreateOrRead returns an existing changeset or creates a new one given
+// the name and namespace.
+// The new changeset is created with status in-progress.
+func (cs *Changeset) CreateOrRead(namespace, name string) (*ChangesetResource, error) {
+	return cs.createOrRead(namespace, name, ChangesetSpec{Status: ChangesetStatusInProgress})
+}
+
 func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
 	out, err := cs.create(tr)
 	if err == nil {
@@ -978,15 +961,26 @@ func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 	return &result, nil
 }
 
-func (cs *Changeset) createOrRead(tr *ChangesetResource) (*ChangesetResource, error) {
-	out, err := cs.create(tr)
+func (cs *Changeset) createOrRead(namespace, name string, spec ChangesetSpec) (*ChangesetResource, error) {
+	res := &ChangesetResource{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: spec,
+	}
+	out, err := cs.create(res)
 	if err == nil {
 		return out, nil
 	}
 	if !trace.IsAlreadyExists(err) {
 		return nil, trace.Wrap(err)
 	}
-	return cs.get(tr.Namespace, tr.Name)
+	return cs.get(res.Namespace, res.Name)
 }
 
 func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
