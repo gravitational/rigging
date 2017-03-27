@@ -177,7 +177,11 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 						}
 					}
 				} else {
-					log.Debugf("%v has deleted resource, nothing to check", op)
+					log.Debugf("%v has deleted resource", op)
+					err := cs.status(ctx, []byte(op.From))
+					if err == nil || !trace.IsNotFound(err) {
+						return trace.CompareFailed("resource is still active: %v", err)
+					}
 				}
 			default:
 				return trace.BadParameter("unsupported operation status: %v", op.Status)
