@@ -904,11 +904,25 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 	return cs.list(namespace)
 }
 
-// CreateOrRead returns an existing changeset or creates a new one given
-// the name and namespace.
+// Create creates a new one given the name and namespace.
 // The new changeset is created with status in-progress.
-func (cs *Changeset) CreateOrRead(namespace, name string) (*ChangesetResource, error) {
-	return cs.createOrRead(namespace, name, ChangesetSpec{Status: ChangesetStatusInProgress})
+// If there's already a changeset with this name in this namespace, AlreadyExists
+// error is returned.
+func (cs *Changeset) Create(namespace, name string) (*ChangesetResource, error) {
+	res := &ChangesetResource{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: ChangesetSpec{
+			Status: ChangesetStatusInProgress,
+		},
+	}
+	return cs.create(res)
 }
 
 func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
