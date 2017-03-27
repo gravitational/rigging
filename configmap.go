@@ -112,5 +112,5 @@ func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryP
 func (c *ConfigMapControl) status() error {
 	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
 	_, err := configMaps.Get(c.configMap.Name)
-	return trace.Wrap(err)
+	return ConvertError(err)
 }

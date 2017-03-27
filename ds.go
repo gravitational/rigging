@@ -100,7 +100,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
 	currentPods, err := c.collectPods(currentDS)
@@ -110,7 +110,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("deleting current daemon set")
 	err = daemons.Delete(c.daemonSet.Name, nil)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	if !cascade {
 		c.Infof("cascade not set, returning")
@@ -119,7 +119,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
 	}
 	return nil
@@ -149,7 +149,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 		c.Infof("deleting current daemon set")
 		err = daemons.Delete(c.daemonSet.Name, nil)
 		if err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
 	}
 	c.Infof("creating new daemon set")
@@ -158,7 +158,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	c.daemonSet.ResourceVersion = ""
 	_, err = daemons.Create(&c.daemonSet)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	c.Infof("created successfully")
 	if currentDS != nil {
@@ -166,7 +166,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 		for _, pod := range currentPods {
 			c.Infof("deleting pod %v", pod.Name)
 			if err := pods.Delete(pod.Name, nil); err != nil {
-				return trace.Wrap(err)
+				return ConvertError(err)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func (c *DSControl) status() error {
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	currentPods, err := c.collectPods(currentDS)
 	if err != nil {
@@ -200,7 +200,7 @@ func (c *DSControl) status() error {
 		LabelSelector: c.nodeSelector(),
 	})
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	return checkRunning(currentPods, nodes.Items, c.Entry)
 }

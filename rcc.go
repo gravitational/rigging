@@ -93,7 +93,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 		LabelSelector: set.AsSelector(),
 	})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, ConvertError(err)
 	}
 	c.Infof("collectPods(%v) -> %v", set, len(podList.Items))
 	currentPods := make([]v1.Pod, 0)
@@ -121,7 +121,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
 	currentRC, err := rcs.Get(c.replicationController.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	pods := c.Client.Core().Pods(c.replicationController.Namespace)
 	currentPods, err := c.collectPods(currentRC)
@@ -131,7 +131,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("deleting")
 	err = rcs.Delete(c.replicationController.Name, nil)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	if !cascade {
 		c.Infof("cascade not set, returning")
@@ -140,7 +140,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
 	}
 	return nil
@@ -165,7 +165,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
 	err = control.Delete(ctx, true)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	_, err = rcs.Create(&c.replicationController)
 	return ConvertError(err)
@@ -192,7 +192,7 @@ func (c *RCControl) Status(ctx context.Context, retryAttempts int, retryPeriod t
 		rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
 		currentRC, err := rcs.Get(c.replicationController.Name)
 		if err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
 		var replicas int32 = 1
 		if currentRC.Spec.Replicas != nil {

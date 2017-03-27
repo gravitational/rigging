@@ -95,7 +95,7 @@ func collectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 		LabelSelector: set.AsSelector(),
 	})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, ConvertError(err)
 	}
 
 	pods := make(map[string]v1.Pod, 0)
