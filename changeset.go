@@ -123,7 +123,7 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		return trace.CompareFailed("cannot update changeset - expected status %q, got %q", ChangesetStatusInProgress, tr.Spec.Status)
 	}
 	var kind unversioned.TypeMeta
-	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
+	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), DefaultBufferSize).Decode(&kind)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -334,7 +334,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -423,7 +423,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -557,7 +557,7 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -694,7 +694,8 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		"job": fmt.Sprintf("%v/%v", job.Namespace, job.Name),
 	})
 	log.Infof("upsert job %v", formatMeta(job.ObjectMeta))
-	jobs := cs.Client.Extensions().Jobs(job.Namespace)
+
+	jobs := cs.Client.Batch().Jobs(job.Namespace)
 	currentJob, err := jobs.Get(job.Name)
 	err = ConvertError(err)
 	if err != nil {
@@ -704,7 +705,8 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		log.Info("existing job not found")
 		currentJob = nil
 	}
-	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
+
+	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
