@@ -113,7 +113,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	c.job.ResourceVersion = ""
 	_, err = jobs.Create(&c.job)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 
 	c.Info("job created successfully")
