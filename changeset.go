@@ -123,34 +123,29 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		return trace.CompareFailed("cannot update changeset - expected status %q, got %q", ChangesetStatusInProgress, tr.Spec.Status)
 	}
 	var kind unversioned.TypeMeta
-	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 1024).Decode(&kind)
+	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), DefaultBufferSize).Decode(&kind)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	switch kind.Kind {
 	case KindJob:
 		_, err = cs.upsertJob(ctx, tr, data)
-		return err
 	case KindDaemonSet:
 		_, err = cs.upsertDaemonSet(ctx, tr, data)
-		return err
 	case KindReplicationController:
 		_, err = cs.upsertRC(ctx, tr, data)
-		return err
 	case KindDeployment:
 		_, err = cs.upsertDeployment(ctx, tr, data)
-		return err
 	case KindService:
 		_, err = cs.upsertService(ctx, tr, data)
-		return err
 	case KindConfigMap:
 		_, err = cs.upsertConfigMap(ctx, tr, data)
-		return err
 	case KindSecret:
 		_, err = cs.upsertSecret(ctx, tr, data)
-		return err
+	default:
+		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
-	return trace.BadParameter("unsupported resource type %v", kind.Kind)
+	return trace.Wrap(err)
 }
 
 // Status checks all statuses for all resources updated or added in the context of a given changeset
@@ -189,7 +184,10 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 						}
 					}
 				} else {
-					log.Debugf("%v has deleted resource, nothing to check", op)
+					info, err := GetOperationInfo(op)
+					if err == nil {
+						log.Debugf("%v has deleted resource, nothing to check", info)
+					}
 				}
 			default:
 				return trace.BadParameter("unsupported operation status: %v", op.Status)
@@ -229,21 +227,23 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	log.Infof("deleting %v/%s", resourceNamespace, resource)
 	switch resource.Kind {
 	case KindDaemonSet:
-		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindJob:
-		return cs.deleteJob(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteJob(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindReplicationController:
-		return cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteRC(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindDeployment:
-		return cs.deleteDeployment(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteDeployment(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindSecret:
-		return cs.deleteSecret(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteSecret(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindConfigMap:
-		return cs.deleteConfigMap(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteConfigMap(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindService:
-		return cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
+		err = cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
+	default:
+		return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 	}
-	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
+	return trace.Wrap(err)
 }
 
 // Freeze "freezes" changeset, prohibits adding or removing any changes to it
@@ -280,10 +280,15 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	})
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
-		if op.Status != OpStatusCompleted {
-			log.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
+		info, err := GetOperationInfo(*op)
+		if err != nil {
+			return trace.Wrap(err)
 		}
-		if err := cs.revert(ctx, op); err != nil {
+		if op.Status != OpStatusCompleted {
+			log.Infof("skipping changeset item %v, status: %v is not the expected %v", info, op.Status, OpStatusCompleted)
+		}
+		err = cs.revert(ctx, op, info)
+		if err != nil {
 			return trace.Wrap(err)
 		}
 		op.Status = OpStatusReverted
@@ -304,21 +309,23 @@ func (cs *Changeset) status(ctx context.Context, data []byte) error {
 	}
 	switch header.Kind {
 	case KindDaemonSet:
-		return cs.statusDaemonSet(ctx, data)
+		err = cs.statusDaemonSet(ctx, data)
 	case KindJob:
-		return cs.statusJob(ctx, data)
+		err = cs.statusJob(ctx, data)
 	case KindReplicationController:
-		return cs.statusRC(ctx, data)
+		err = cs.statusRC(ctx, data)
 	case KindDeployment:
-		return cs.statusDeployment(ctx, data)
+		err = cs.statusDeployment(ctx, data)
 	case KindService:
-		return cs.statusService(ctx, data)
+		err = cs.statusService(ctx, data)
 	case KindSecret:
-		return cs.statusSecret(ctx, data)
+		err = cs.statusSecret(ctx, data)
 	case KindConfigMap:
-		return cs.statusConfigMap(ctx, data)
+		err = cs.statusConfigMap(ctx, data)
+	default:
+		return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 	}
-	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
@@ -326,7 +333,7 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
@@ -338,7 +345,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
@@ -346,7 +353,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusDeployment(ctx context.Context, data []byte) error {
@@ -354,7 +361,7 @@ func (cs *Changeset) statusDeployment(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusService(ctx context.Context, data []byte) error {
@@ -362,7 +369,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusSecret(ctx context.Context, data []byte) error {
@@ -370,7 +377,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte) error {
@@ -378,7 +385,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return trace.Wrap(control.Status(ctx, 1, 0))
 }
 
 func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj interface{}, fn func() error) error {
@@ -401,35 +408,37 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 	}
 	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
 	_, err = cs.update(tr)
-	return err
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, ds, func() error {
-		return control.Delete(ctx, cascade)
+	err = cs.withDeleteOp(ctx, tr, ds, func() error {
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, job, func() error {
-		return control.Delete(ctx, cascade)
+	err = cs.withDeleteOp(ctx, tr, job, func() error {
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
@@ -442,92 +451,94 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 		return trace.Wrap(err)
 	}
 	return cs.withDeleteOp(ctx, tr, rc, func() error {
-		return control.Delete(ctx, cascade)
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, deployment, func() error {
-		return control.Delete(ctx, cascade)
+	err = cs.withDeleteOp(ctx, tr, deployment, func() error {
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	return cs.withDeleteOp(ctx, tr, service, func() error {
-		return control.Delete(ctx, cascade)
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, configMap, func() error {
-		return control.Delete(ctx, cascade)
+	err = cs.withDeleteOp(ctx, tr, configMap, func() error {
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, secret, func() error {
-		return control.Delete(ctx, cascade)
+	err = cs.withDeleteOp(ctx, tr, secret, func() error {
+		return trace.Wrap(control.Delete(ctx, cascade))
 	})
+	return trace.Wrap(err)
 }
 
-func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
-	info, err := GetOperationInfo(*item)
-	if err != nil {
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
+func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *OperationInfo) (err error) {
+	log.Debugf("reverting %v", info)
 
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
-		return cs.revertDaemonSet(ctx, item)
+		err = cs.revertDaemonSet(ctx, item)
 	case KindJob:
-		return cs.revertJob(ctx, item)
+		err = cs.revertJob(ctx, item)
 	case KindReplicationController:
-		return cs.revertRC(ctx, item)
+		err = cs.revertRC(ctx, item)
 	case KindDeployment:
-		return cs.revertDeployment(ctx, item)
+		err = cs.revertDeployment(ctx, item)
 	case KindService:
-		return cs.revertService(ctx, item)
+		err = cs.revertService(ctx, item)
 	case KindSecret:
-		return cs.revertSecret(ctx, item)
+		err = cs.revertSecret(ctx, item)
 	case KindConfigMap:
-		return cs.revertConfigMap(ctx, item)
+		err = cs.revertConfigMap(ctx, item)
+	default:
+		return trace.BadParameter("unsupported resource type %v", kind)
 	}
-	return trace.BadParameter("unsupported resource type %v", kind)
+	return trace.Wrap(err)
 }
 
 func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) error {
@@ -537,14 +548,14 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated daemon set, so we create a new version
 	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
@@ -564,10 +575,10 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 
 	if len(item.From) == 0 {
 		// this operation created the job, so we will delete it
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated the job, so we create a new version
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertRC(ctx context.Context, item *ChangesetItem) error {
@@ -577,14 +588,14 @@ func (cs *Changeset) revertRC(ctx context.Context, item *ChangesetItem) error {
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated RC, so we create a new version
 	control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertDeployment(ctx context.Context, item *ChangesetItem) error {
@@ -594,14 +605,14 @@ func (cs *Changeset) revertDeployment(ctx context.Context, item *ChangesetItem) 
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated Deployment, so we create a new version
 	control, err := NewDeploymentControl(DeploymentConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertService(ctx context.Context, item *ChangesetItem) error {
@@ -611,14 +622,14 @@ func (cs *Changeset) revertService(ctx context.Context, item *ChangesetItem) err
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated Service, so we create a new version
 	control, err := NewServiceControl(ServiceConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertConfigMap(ctx context.Context, item *ChangesetItem) error {
@@ -628,14 +639,14 @@ func (cs *Changeset) revertConfigMap(ctx context.Context, item *ChangesetItem) e
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated ConfigMap, so we create a new version
 	control, err := NewConfigMapControl(ConfigMapConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) error {
@@ -645,14 +656,14 @@ func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) erro
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		return trace.Wrap(control.Delete(ctx, true))
 	}
 	// this operation either created or updated Secret, so we create a new version
 	control, err := NewSecretControl(SecretConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Upsert(ctx)
+	return trace.Wrap(control.Upsert(ctx))
 }
 
 func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old interface{}, new interface{}, fn func() error) (*ChangesetResource, error) {
@@ -660,6 +671,7 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	item := ChangesetItem{
 		CreationTimestamp: time.Now().UTC(),
 		To:                string(to),
@@ -681,7 +693,8 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 		return nil, trace.Wrap(err)
 	}
 	tr.Spec.Items[len(tr.Spec.Items)-1].Status = OpStatusCompleted
-	return cs.update(tr)
+	result, err := cs.update(tr)
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -704,13 +717,15 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		log.Info("existing job not found")
 		currentJob = nil
 	}
+
 	control, err := NewJobControl(JobConfig{job: *job, Clientset: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentJob, job, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentJob, job, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -737,9 +752,10 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentDS, ds, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentDS, ds, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -766,9 +782,10 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentRC, rc, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentRC, rc, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -795,9 +812,10 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentDeployment, deployment, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentDeployment, deployment, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -824,9 +842,10 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentService, service, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentService, service, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -853,9 +872,10 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentConfigMap, configMap, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentConfigMap, configMap, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
@@ -882,9 +902,10 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentSecret, secret, func() error {
-		return control.Upsert(ctx)
+	result, err := cs.withUpsertOp(ctx, tr, currentSecret, secret, func() error {
+		return trace.Wrap(control.Upsert(ctx))
 	})
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) Init(ctx context.Context) error {
@@ -916,14 +937,16 @@ func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*Changese
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.get(namespace, name)
+	result, err := cs.get(namespace, name)
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList, error) {
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.list(namespace)
+	result, err := cs.list(namespace)
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
@@ -934,7 +957,8 @@ func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
 	if !trace.IsAlreadyExists(err) {
 		return nil, err
 	}
-	return cs.update(tr)
+	result, err := cs.update(tr)
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
@@ -954,10 +978,8 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
-	if err := json.Unmarshal(raw.Raw, &result); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &result, nil
+	err = json.Unmarshal(raw.Raw, &result)
+	return &result, trace.Wrap(err)
 }
 
 func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
@@ -970,10 +992,8 @@ func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
-	if err := json.Unmarshal(raw.Raw, &result); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &result, nil
+	err = json.Unmarshal(raw.Raw, &result)
+	return &result, trace.Wrap(err)
 }
 
 func (cs *Changeset) createOrRead(tr *ChangesetResource) (*ChangesetResource, error) {
@@ -984,7 +1004,8 @@ func (cs *Changeset) createOrRead(tr *ChangesetResource) (*ChangesetResource, er
 	if !trace.IsAlreadyExists(err) {
 		return nil, trace.Wrap(err)
 	}
-	return cs.get(tr.Namespace, tr.Name)
+	result, err := cs.get(tr.Namespace, tr.Name)
+	return result, trace.Wrap(err)
 }
 
 func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
@@ -997,7 +1018,7 @@ func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return ConvertError(err)
+		return trace.Wrap(ConvertError(err))
 	}
 	return nil
 }
@@ -1015,13 +1036,11 @@ func (cs *Changeset) update(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return nil, ConvertError(err)
+		return nil, trace.Wrap(ConvertError(err))
 	}
 	var result ChangesetResource
-	if err := json.Unmarshal(raw.Raw, &result); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &result, nil
+	err = json.Unmarshal(raw.Raw, &result)
+	return &result, trace.Wrap(err)
 }
 
 func (cs *Changeset) list(namespace string) (*ChangesetList, error) {
@@ -1031,11 +1050,9 @@ func (cs *Changeset) list(namespace string) (*ChangesetList, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		return nil, ConvertError(err)
+		return nil, trace.Wrap(ConvertError(err))
 	}
 	var result ChangesetList
-	if err := json.Unmarshal(raw.Raw, &result); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &result, nil
+	err = json.Unmarshal(raw.Raw, &result)
+	return &result, trace.Wrap(err)
 }
