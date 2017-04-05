@@ -33,7 +33,6 @@ func NewJobControl(config JobConfig) (*JobControl, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	config.job.Kind = KindJob
 	return &JobControl{
 		JobConfig: config,
 		Entry: log.WithFields(log.Fields{
@@ -111,7 +110,12 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	c.job.UID = ""
 	c.job.SelfLink = ""
 	c.job.ResourceVersion = ""
-	_, err = jobs.Create(&c.job)
+	if c.job.Spec.Selector != nil {
+		// Remove auto-generated labels
+		delete(c.job.Spec.Selector.MatchLabels, ControllerUIDLabel)
+		delete(c.job.Spec.Template.Labels, ControllerUIDLabel)
+	}
+	_, err = jobs.Create(c.job)
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -180,13 +184,17 @@ type JobControl struct {
 }
 
 type JobConfig struct {
-	job batchv1.Job
+	job *batchv1.Job
 	*kubernetes.Clientset
 }
 
 func (c *JobConfig) checkAndSetDefaults() error {
 	if c.Clientset == nil {
 		return trace.BadParameter("missing parameter Clientset")
+	}
+	c.job.Kind = KindJob
+	if c.job.APIVersion == "" {
+		c.job.APIVersion = BatchAPIVersion
 	}
 	return nil
 }

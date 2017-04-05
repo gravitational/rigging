@@ -23,6 +23,8 @@ const (
 	KindService               = "Service"
 	KindSecret                = "Secret"
 	KindJob                   = "Job"
+	BatchAPIVersion           = "batch/v1"
+	ControllerUIDLabel        = "controller-uid"
 	AnnotationCreatedBy       = "kubernetes.io/created-by"
 	OpStatusCreated           = "created"
 	OpStatusCompleted         = "completed"
