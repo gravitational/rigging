@@ -177,8 +177,12 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 						}
 					}
 				} else {
-					log.Debugf("%v has deleted resource", op)
-					err := cs.status(ctx, []byte(op.From))
+					info, err := GetOperationInfo(op)
+					if err != nil {
+						return trace.Wrap(err)
+					}
+					log.Debugf("%v has deleted resource", info)
+					err = cs.status(ctx, []byte(op.From))
 					if err == nil || !trace.IsNotFound(err) {
 						return trace.CompareFailed("resource is still active: %v", err)
 					}
