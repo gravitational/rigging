@@ -15,7 +15,7 @@ build:
 
 .PHONY: test
 test:
-	go test -v -test.parallel=0 ./...
+	go test -v -test.parallel=0 ./ ./tool/...
 
 BUILDBOX := quay.io/gravitational/debian-venti:go1.7-jessie
 
@@ -25,7 +25,7 @@ DST := /gopath/src/github.com/gravitational/rigging
 # This directory
 SRC := $(dir $(CURDIR)/$(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))
 
-VERSION ?= 0.0.1
+VERSION ?= $(shell git describe --long --tags --always|awk -F'[.-]' '{print $$1 "." $$2 "." $$4}')
 IMAGE := quay.io/gravitational/rig:$(VERSION)
 
 # docker target starts build inside the container
@@ -36,6 +36,14 @@ docker-build:
 		   -v $(BUILDDIR):$(DST)/build \
 		   $(BUILDBOX) \
 		   /bin/bash -c "make -C $(DST) build"
+
+# docker target starts tests inside the container
+.PHONY: docker-test
+docker-test:
+	docker run -i --rm=true \
+		   -v $(SRC):$(DST) \
+		   $(BUILDBOX) \
+		   /bin/bash -c "make -C $(DST) test"
 
 .PHONY: docker-image
 docker-image:
