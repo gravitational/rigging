@@ -17,6 +17,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	logrusSyslog "github.com/Sirupsen/logrus/hooks/syslog"
+	goyaml "github.com/ghodss/yaml"
 	yaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -45,6 +46,13 @@ func run() error {
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
 		cupsertChangeset = Ref(cupsert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 		cupsertFile      = cupsert.Flag("file", "file with new resource spec").Short('f').Required().String()
+
+		cupsertConfigMap          = app.Command("configmap", "Upsert configmap in the context of a changeset")
+		cupsertConfigMapChangeset = Ref(cupsertConfigMap.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
+		cupsertConfigMapName      = cupsertConfigMap.Arg("name", "ConfigMap name").Required().String()
+		cupsertConfigMapNamespace = cupsertConfigMap.Flag("resource-namespace", "ConfigMap namespace").Default(rigging.DefaultNamespace).String()
+		cupsertConfigMapFiles     = cupsertConfigMap.Flag("from-file", "files or directories with contents").Strings()
+		cupsertConfigMapLiterals  = cupsertConfigMap.Flag("from-literal", "literals in form of key=val").Strings()
 
 		cstatus         = app.Command("status", "Check status of all operations in a changeset")
 		cstatusResource = Ref(cstatus.Arg("resource", "resource to check, e.g. tx/tx1").Required())
@@ -116,6 +124,8 @@ func run() error {
 		return revert(ctx, client, config, *namespace, *crevertChangeset)
 	case cfreeze.FullCommand():
 		return freeze(ctx, client, config, *namespace, *cfreezeChangeset)
+	case cupsertConfigMap.FullCommand():
+		return upsertConfigMap(ctx, client, config, *namespace, *cupsertConfigMapChangeset, *cupsertConfigMapName, *cupsertConfigMapNamespace, *cupsertConfigMapFiles, *cupsertConfigMapLiterals)
 	}
 
 	return trace.BadParameter("unsupported command: %v", cmd)
@@ -204,6 +214,33 @@ func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *r
 			fmt.Printf("%v is not found, force flag is set, %v not updated, ignoring \n", resource.String(), changeset.Name)
 			return nil
 		}
+		return trace.Wrap(err)
+	}
+	fmt.Printf("changeset %v updated \n", changeset.Name)
+	return nil
+}
+
+func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, changesetNamespace string, changeset rigging.Ref, configMapName, configMapNamespace string, files []string, literals []string) error {
+	if changeset.Kind != rigging.KindChangeset {
+		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
+	}
+	configMap, err := rigging.GenerateConfigMap(configMapName, configMapNamespace, files, literals)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+		Client: client,
+		Config: config,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	data, err := goyaml.Marshal(configMap)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = cs.Upsert(ctx, changesetNamespace, changeset.Name, data)
+	if err != nil {
 		return trace.Wrap(err)
 	}
 	fmt.Printf("changeset %v updated \n", changeset.Name)

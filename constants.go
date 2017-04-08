@@ -37,6 +37,7 @@ const (
 	// RetryPeriod is a period between Retries
 	DefaultRetryPeriod = time.Second
 	DefaultBufferSize  = 1024
+	V1                 = "v1"
 )
 
 // NamespaceOrDefault returns a default namespace if the specified namespace is empty
