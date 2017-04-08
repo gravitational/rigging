@@ -25,7 +25,7 @@ DST := /gopath/src/github.com/gravitational/rigging
 # This directory
 SRC := $(dir $(CURDIR)/$(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))
 
-VERSION ?= $(shell git describe --long --tags --always|awk -F'[.-]' '{print $$1 "." $$2 "." $$4}')
+VERSION ?= 0.0.2
 IMAGE := quay.io/gravitational/rig:$(VERSION)
 
 # docker target starts build inside the container
@@ -61,3 +61,7 @@ docker-image:
 publish-docker-image:
 	docker push $(IMAGE)
 
+
+.PHONY: print-image
+print-image:
+	echo $(IMAGE)
