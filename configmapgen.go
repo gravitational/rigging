@@ -50,11 +50,11 @@ func GenerateConfigMap(name string, namespace string, fromFile []string, fromLit
 // information into the provided configMap.
 func handleConfigMapFromLiteralSources(configMap *v1.ConfigMap, literalSources []string) error {
 	for _, literalSource := range literalSources {
-		keyName, value, err := parseLiteralSource(literalSource)
+		key, value, err := parseLiteralSource(literalSource)
 		if err != nil {
 			return err
 		}
-		err = addKeyFromLiteralToConfigMap(configMap, keyName, value)
+		err = addKeyFromLiteral(configMap, key, value)
 		if err != nil {
 			return err
 		}
@@ -66,7 +66,7 @@ func handleConfigMapFromLiteralSources(configMap *v1.ConfigMap, literalSources [
 // into the provided configMap
 func handleConfigMapFromFileSources(configMap *v1.ConfigMap, fileSources []string) error {
 	for _, fileSource := range fileSources {
-		keyName, filePath, err := parseFileSource(fileSource)
+		key, filePath, err := parseFileSource(fileSource)
 		if err != nil {
 			return err
 		}
@@ -85,15 +85,15 @@ func handleConfigMapFromFileSources(configMap *v1.ConfigMap, fileSources []strin
 			for _, item := range fileList {
 				itemPath := path.Join(filePath, item.Name())
 				if item.Mode().IsRegular() {
-					keyName = item.Name()
-					err = addKeyFromFileToConfigMap(configMap, keyName, itemPath)
+					key = item.Name()
+					err = addKeyFromFile(configMap, key, itemPath)
 					if err != nil {
 						return trace.Wrap(err)
 					}
 				}
 			}
 		} else {
-			err = addKeyFromFileToConfigMap(configMap, keyName, filePath)
+			err = addKeyFromFile(configMap, key, filePath)
 			if err != nil {
 				return trace.Wrap(err)
 			}
@@ -103,19 +103,19 @@ func handleConfigMapFromFileSources(configMap *v1.ConfigMap, fileSources []strin
 	return nil
 }
 
-// addKeyFromFileToConfigMap adds a key with the given name to a ConfigMap, populating
+// addKeyFromFile adds a key with the given name to a ConfigMap, populating
 // the value with the content of the given file path, or returns an error.
-func addKeyFromFileToConfigMap(configMap *v1.ConfigMap, keyName, filePath string) error {
+func addKeyFromFile(configMap *v1.ConfigMap, key, filePath string) error {
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
-	return addKeyFromLiteralToConfigMap(configMap, keyName, string(data))
+	return addKeyFromLiteral(configMap, key, string(data))
 }
 
-// addKeyFromLiteralToConfigMap adds the given key and data to the given config map,
+// addKeyFromLiteral adds the given key and data to the given config map,
 // returning an error if the key is not valid or if the key already exists.
-func addKeyFromLiteralToConfigMap(configMap *v1.ConfigMap, keyName, data string) error {
+func addKeyFromLiteral(configMap *v1.ConfigMap, keyName, data string) error {
 	if _, entryExists := configMap.Data[keyName]; entryExists {
 		return trace.BadParameter("cannot add key %s, another key by that name already exists: %v.", keyName, configMap.Data)
 	}
@@ -123,7 +123,7 @@ func addKeyFromLiteralToConfigMap(configMap *v1.ConfigMap, keyName, data string)
 	return nil
 }
 
-// parseLiteralSource parses the source key=val pair
+// parseLiteralSource parses the source as key=val pair
 func parseLiteralSource(source string) (keyName, value string, err error) {
 	// leading equal is invalid
 	if strings.Index(source, "=") == 0 {
