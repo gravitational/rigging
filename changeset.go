@@ -264,10 +264,14 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	})
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
-		if op.Status != OpStatusCompleted {
-			log.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
+		info, err := GetOperationInfo(*op)
+		if err != nil {
+			return trace.Wrap(err)
 		}
-		if err := cs.revert(ctx, op); err != nil {
+		if op.Status != OpStatusCompleted {
+			log.Infof("skipping changeset item %v, status: %v is not the expected %v", info, op.Status, OpStatusCompleted)
+		}
+		if err := cs.revert(ctx, op, info); err != nil {
 			return trace.Wrap(err)
 		}
 		op.Status = OpStatusReverted
@@ -486,14 +490,7 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 	})
 }
 
-func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
-	info, err := GetOperationInfo(*item)
-	if err != nil {
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-
+func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *OperationInfo) error {
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
@@ -957,7 +954,6 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		log.Errorf("failed to create changeset resource: %v\n%s", err, data)
 		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
