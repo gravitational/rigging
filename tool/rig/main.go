@@ -270,7 +270,8 @@ func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	return nil
 }
 
-func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, resource rigging.Ref, retryAttempts int, retryPeriod time.Duration) error {
+func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, resource rigging.Ref,
+	retryAttempts int, retryPeriod time.Duration) error {
 	switch resource.Kind {
 	case rigging.KindChangeset:
 		cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
@@ -298,7 +299,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return updater.Status(ctx, retryAttempts, retryPeriod)
+		return rigging.PollStatus(ctx, retryAttempts, retryPeriod, updater)
 	case rigging.KindDeployment:
 		deployment, err := client.Extensions().Deployments(namespace).Get(resource.Name)
 		if err != nil {
@@ -311,7 +312,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return updater.Status(ctx, retryAttempts, retryPeriod)
+		return rigging.PollStatus(ctx, retryAttempts, retryPeriod, updater)
 	}
 	return trace.BadParameter("don't know how to check status of %v", resource.Kind)
 }

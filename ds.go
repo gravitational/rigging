@@ -17,7 +17,6 @@ package rigging
 import (
 	"context"
 	"io"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -181,11 +180,7 @@ func (c *DSControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *DSControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
-}
-
-func (c *DSControl) status() error {
+func (c *DSControl) Status() error {
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name)
 	if err != nil {

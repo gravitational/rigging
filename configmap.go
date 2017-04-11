@@ -17,7 +17,6 @@ package rigging
 import (
 	"context"
 	"io"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -105,11 +104,7 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 	return ConvertError(err)
 }
 
-func (c *ConfigMapControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
-}
-
-func (c *ConfigMapControl) status() error {
+func (c *ConfigMapControl) Status() error {
 	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
 	_, err := configMaps.Get(c.configMap.Name)
 	return ConvertError(err)

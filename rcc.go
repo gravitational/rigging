@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -179,37 +178,27 @@ func (c *RCControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *RCControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
+func (c *RCControl) Status() error {
+	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
+	currentRC, err := rcs.Get(c.replicationController.Name)
+	if err != nil {
+		return ConvertError(err)
 	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
+	var replicas int32 = 1
+	if currentRC.Spec.Replicas != nil {
+		replicas = *currentRC.Spec.Replicas
 	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
-
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-		currentRC, err := rcs.Get(c.replicationController.Name)
-		if err != nil {
-			return ConvertError(err)
+	if currentRC.Status.Replicas != replicas {
+		return trace.CompareFailed("expected replicas: %v, ready: %#v", replicas, currentRC.Status.Replicas)
+	}
+	pods, err := c.collectPods(currentRC)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	for _, pod := range pods {
+		if pod.Status.Phase != v1.PodRunning {
+			return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
 		}
-		var replicas int32 = 1
-		if currentRC.Spec.Replicas != nil {
-			replicas = *(currentRC.Spec.Replicas)
-		}
-		if currentRC.Status.Replicas != replicas {
-			return trace.CompareFailed("expected replicas: %v, ready: %#v", replicas, currentRC.Status.Replicas)
-		}
-		pods, err := c.collectPods(currentRC)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		for _, pod := range pods {
-			if pod.Status.Phase != v1.PodRunning {
-				return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
-			}
-		}
-		return nil
-	})
+	}
+	return nil
 }

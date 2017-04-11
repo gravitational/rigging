@@ -30,6 +30,19 @@ const (
 	ActionApply   action = "apply"
 )
 
+// StatusReporter enables an implementor to report status.
+// Status returns nil when the object has been completed
+// and error otherwise.
+type StatusReporter interface {
+	// Status returns the state of the object.
+	// Nil return signifies completion (created/deleted/updated),
+	// while non-nil return specifies an error condition.
+	Status() error
+	// Infof logs the specified message and argument in this object's
+	// context.
+	Infof(message string, args ...interface{})
+}
+
 // KubeCommand returns an exec.Command for kubectl with the supplied arguments.
 func KubeCommand(args ...string) *exec.Cmd {
 	return exec.Command("/usr/local/bin/kubectl", args...)
@@ -72,16 +85,16 @@ func FromStdIn(act action, data string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func pollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duration, fn func() error, entry *log.Entry) error {
+func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duration, reporter StatusReporter) error {
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
 	}
 	if retryPeriod == 0 {
 		retryPeriod = DefaultRetryPeriod
 	}
-	entry.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
+	reporter.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
 
-	return retry(ctx, retryAttempts, retryPeriod, fn)
+	return retry(ctx, retryAttempts, retryPeriod, reporter.Status)
 }
 
 func collectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
@@ -120,18 +133,21 @@ func collectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 }
 
 func retry(ctx context.Context, times int, period time.Duration, fn func() error) error {
-	var err error
-	for i := 0; i < times; i += 1 {
-		err = fn()
-		if err == nil {
-			return nil
-		}
+	if times < 1 {
+		return nil
+	}
+	err := fn()
+	for i := 1; i < times; i += 1 {
 		log.Infof("attempt %v, result: %v, retry in %v", i+1, err, period)
 		select {
 		case <-ctx.Done():
 			log.Infof("context is closing, return")
 			return err
 		case <-time.After(period):
+		}
+		err = fn()
+		if err == nil {
+			return nil
 		}
 	}
 	return err

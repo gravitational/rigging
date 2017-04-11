@@ -59,6 +59,7 @@ type ChangesetSpec struct {
 type ChangesetItem struct {
 	From              string    `json:"from"`
 	To                string    `json:"to"`
+	UID               string    `json:"uid"`
 	Status            string    `json:"status"`
 	CreationTimestamp time.Time `json:"time"`
 }
@@ -80,15 +81,15 @@ func (o *OperationInfo) Kind() string {
 
 func (o *OperationInfo) String() string {
 	if o.From != nil && o.To == nil {
-		return fmt.Sprintf("delete %v %v from namespace %v", o.From.Kind, o.From.Name, Namespace(o.From.Namespace))
+		return fmt.Sprintf("delete %v %v", o.From.Kind, formatMeta(o.From.ObjectMeta))
 	}
 	if o.From != nil && o.To != nil {
-		return fmt.Sprintf("update %v %v in namespace %v", o.To.Kind, o.To.Name, Namespace(o.To.Namespace))
+		return fmt.Sprintf("update %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta))
 	}
 	if o.From == nil && o.To != nil {
-		return fmt.Sprintf("upsert %v %v in namespace %v", o.To.Kind, o.To.Name, Namespace(o.To.Namespace))
+		return fmt.Sprintf("upsert %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta))
 	}
-	return "unknown operation"
+	return "invalid operation: both resources cannot be empty"
 }
 
 // GetOperationInfo returns operation information
