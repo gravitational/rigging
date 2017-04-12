@@ -17,7 +17,6 @@ package rigging
 import (
 	"context"
 	"io"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -105,11 +104,7 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 	return ConvertError(err)
 }
 
-func (c *SecretControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
-}
-
-func (c *SecretControl) status() error {
+func (c *SecretControl) Status() error {
 	secrets := c.Client.Core().Secrets(c.secret.Namespace)
 	_, err := secrets.Get(c.secret.Name)
 	return ConvertError(err)

@@ -29,6 +29,7 @@ import (
 	"github.com/gravitational/trace"
 	"k8s.io/client-go/1.4/kubernetes"
 	api "k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/meta"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
@@ -103,19 +104,7 @@ func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetNa
 }
 
 func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
-	tr, err := cs.createOrRead(&ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindChangeset,
-			APIVersion: ChangesetAPIVersion,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name:      changesetName,
-			Namespace: changesetNamespace,
-		},
-		Spec: ChangesetSpec{
-			Status: ChangesetStatusInProgress,
-		},
-	})
+	tr, err := cs.createOrRead(changesetNamespace, changesetName, ChangesetSpec{Status: ChangesetStatusInProgress})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -182,14 +171,22 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 				return trace.BadParameter("%v is not completed yet", tr)
 			case OpStatusCompleted, OpStatusReverted:
 				if op.To != "" {
-					err := cs.status(ctx, []byte(op.To))
+					err := cs.status(ctx, []byte(op.To), "")
 					if err != nil {
 						if op.Status != OpStatusReverted || !trace.IsNotFound(err) {
 							return trace.Wrap(err)
 						}
 					}
 				} else {
-					log.Debugf("%v has deleted resource, nothing to check", op)
+					info, err := GetOperationInfo(op)
+					if err != nil {
+						return trace.Wrap(err)
+					}
+					err = cs.status(ctx, []byte(op.From), op.UID)
+					if err == nil || !trace.IsNotFound(err) {
+						return trace.CompareFailed("%v with UID %q still active: %v",
+							formatMeta(info.From.ObjectMeta), op.UID, err)
+					}
 				}
 			default:
 				return trace.BadParameter("unsupported operation status: %v", op.Status)
@@ -204,19 +201,7 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	if err := cs.Init(ctx); err != nil {
 		return trace.Wrap(err)
 	}
-	tr, err := cs.createOrRead(&ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       KindChangeset,
-			APIVersion: ChangesetAPIVersion,
-		},
-		ObjectMeta: v1.ObjectMeta{
-			Name:      changesetName,
-			Namespace: changesetNamespace,
-		},
-		Spec: ChangesetSpec{
-			Status: ChangesetStatusInProgress,
-		},
-	})
+	tr, err := cs.createOrRead(changesetNamespace, changesetName, ChangesetSpec{Status: ChangesetStatusInProgress})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -280,10 +265,14 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	})
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
-		if op.Status != OpStatusCompleted {
-			log.Infof("skipping changeset item %v, status: %v is not %v", i, op.Status, OpStatusCompleted)
+		info, err := GetOperationInfo(*op)
+		if err != nil {
+			return trace.Wrap(err)
 		}
-		if err := cs.revert(ctx, op); err != nil {
+		if op.Status != OpStatusCompleted {
+			log.Infof("skipping changeset item %v, status: %v is not the expected %v", info, op.Status, OpStatusCompleted)
+		}
+		if err := cs.revert(ctx, op, info); err != nil {
 			return trace.Wrap(err)
 		}
 		op.Status = OpStatusReverted
@@ -297,97 +286,185 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	return trace.Wrap(err)
 }
 
-func (cs *Changeset) status(ctx context.Context, data []byte) error {
+func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error {
 	header, err := ParseResourceHeader(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	switch header.Kind {
 	case KindDaemonSet:
-		return cs.statusDaemonSet(ctx, data)
+		return cs.statusDaemonSet(ctx, data, uid)
 	case KindJob:
-		return cs.statusJob(ctx, data)
+		return cs.statusJob(ctx, data, uid)
 	case KindReplicationController:
-		return cs.statusRC(ctx, data)
+		return cs.statusRC(ctx, data, uid)
 	case KindDeployment:
-		return cs.statusDeployment(ctx, data)
+		return cs.statusDeployment(ctx, data, uid)
 	case KindService:
-		return cs.statusService(ctx, data)
+		return cs.statusService(ctx, data, uid)
 	case KindSecret:
-		return cs.statusSecret(ctx, data)
+		return cs.statusSecret(ctx, data, uid)
 	case KindConfigMap:
-		return cs.statusConfigMap(ctx, data)
+		return cs.statusConfigMap(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
 
-func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte) error {
-	control, err := NewDSControl(DSConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid string) error {
+	daemonset, err := ParseDaemonSet(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	if uid != "" {
+		existing, err := cs.Client.Extensions().DaemonSets(daemonset.Namespace).Get(daemonset.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("daemonset with UID %v not found", uid)
+		}
+	}
+	control, err := NewDSControl(DSConfig{DaemonSet: daemonset, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
 }
 
-func (cs *Changeset) statusJob(ctx context.Context, data []byte) error {
+func (cs *Changeset) statusJob(ctx context.Context, data []byte, uid string) error {
 	job, err := ParseJob(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.Batch().Jobs(job.Namespace).Get(job.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("job with UID %v not found", uid)
+		}
 	}
 	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return control.Status()
 }
 
-func (cs *Changeset) statusRC(ctx context.Context, data []byte) error {
-	control, err := NewRCControl(RCConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) error {
+	rc, err := ParseReplicationController(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
-}
-
-func (cs *Changeset) statusDeployment(ctx context.Context, data []byte) error {
-	control, err := NewDeploymentControl(DeploymentConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if uid != "" {
+		existing, err := cs.Client.ReplicationControllers(rc.Namespace).Get(rc.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("replication controller with UID %v not found", uid)
+		}
+	}
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return control.Status()
 }
 
-func (cs *Changeset) statusService(ctx context.Context, data []byte) error {
-	control, err := NewServiceControl(ServiceConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+func (cs *Changeset) statusDeployment(ctx context.Context, data []byte, uid string) error {
+	deployment, err := ParseDeployment(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
-}
-
-func (cs *Changeset) statusSecret(ctx context.Context, data []byte) error {
-	control, err := NewSecretControl(SecretConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+	if uid != "" {
+		existing, err := cs.Client.Extensions().Deployments(deployment.Namespace).Get(deployment.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("deployment with UID %v not found", uid)
+		}
+	}
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	return control.Status()
 }
 
-func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte) error {
-	control, err := NewConfigMapControl(ConfigMapConfig{Reader: bytes.NewReader(data), Client: cs.Client})
+func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string) error {
+	service, err := ParseService(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return control.Status(ctx, 1, 0)
+	if uid != "" {
+		existing, err := cs.Client.Services(service.Namespace).Get(service.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("service with UID %v not found", uid)
+		}
+	}
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
 }
 
-func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj interface{}, fn func() error) error {
+func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) error {
+	secret, err := ParseSecret(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.Secrets(secret.Namespace).Get(secret.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("secret with UID %v not found", uid)
+		}
+	}
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid string) error {
+	configMap, err := ParseConfigMap(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.ConfigMaps(configMap.Namespace).Get(configMap.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("configmap with UID %v not found", uid)
+		}
+	}
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj meta.Object, fn func() error) error {
 	data, err := goyaml.Marshal(obj)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	tr.Spec.Items = append(tr.Spec.Items, ChangesetItem{
 		From:              string(data),
+		UID:               string(obj.GetUID()),
 		Status:            OpStatusCreated,
 		CreationTimestamp: time.Now().UTC(),
 	})
@@ -502,14 +579,7 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 	})
 }
 
-func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem) error {
-	info, err := GetOperationInfo(*item)
-	if err != nil {
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-
+func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *OperationInfo) error {
 	kind := info.Kind()
 	switch info.Kind() {
 	case KindDaemonSet:
@@ -655,7 +725,7 @@ func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) erro
 	return control.Upsert(ctx)
 }
 
-func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old interface{}, new interface{}, fn func() error) (*ChangesetResource, error) {
+func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old meta.Object, new meta.Object, fn func() error) (*ChangesetResource, error) {
 	to, err := goyaml.Marshal(new)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -671,6 +741,7 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 			return nil, trace.Wrap(err)
 		}
 		item.From = string(from)
+		item.UID = string(old.GetUID())
 	}
 	tr.Spec.Items = append(tr.Spec.Items, item)
 	tr, err = cs.update(tr)
@@ -790,7 +861,7 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing deployment not found")
+		log.Debug("existing deployment not found")
 		currentDeployment = nil
 	}
 	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
@@ -928,6 +999,27 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 	return cs.list(namespace)
 }
 
+// Create creates a new one given the name and namespace.
+// The new changeset is created with status in-progress.
+// If there's already a changeset with this name in this namespace, AlreadyExists
+// error is returned.
+func (cs *Changeset) Create(namespace, name string) (*ChangesetResource, error) {
+	res := &ChangesetResource{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: ChangesetSpec{
+			Status: ChangesetStatusInProgress,
+		},
+	}
+	return cs.create(res)
+}
+
 func (cs *Changeset) upsert(tr *ChangesetResource) (*ChangesetResource, error) {
 	out, err := cs.create(tr)
 	if err == nil {
@@ -952,7 +1044,6 @@ func (cs *Changeset) create(tr *ChangesetResource) (*ChangesetResource, error) {
 		Do().
 		Into(&raw)
 	if err != nil {
-		log.Errorf("failed to create changeset resource: %v\n%s", err, data)
 		return nil, ConvertError(err)
 	}
 	var result ChangesetResource
@@ -978,15 +1069,26 @@ func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 	return &result, nil
 }
 
-func (cs *Changeset) createOrRead(tr *ChangesetResource) (*ChangesetResource, error) {
-	out, err := cs.create(tr)
+func (cs *Changeset) createOrRead(namespace, name string, spec ChangesetSpec) (*ChangesetResource, error) {
+	res := &ChangesetResource{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       KindChangeset,
+			APIVersion: ChangesetAPIVersion,
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: spec,
+	}
+	out, err := cs.create(res)
 	if err == nil {
 		return out, nil
 	}
 	if !trace.IsAlreadyExists(err) {
 		return nil, trace.Wrap(err)
 	}
-	return cs.get(tr.Namespace, tr.Name)
+	return cs.get(res.Namespace, res.Name)
 }
 
 func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {

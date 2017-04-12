@@ -17,7 +17,6 @@ package rigging
 import (
 	"context"
 	"io"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -107,11 +106,7 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 	return ConvertError(err)
 }
 
-func (c *ServiceControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
-}
-
-func (c *ServiceControl) status() error {
+func (c *ServiceControl) Status() error {
 	services := c.Client.Core().Services(c.service.Namespace)
 	_, err := services.Get(c.service.Name)
 	return ConvertError(err)

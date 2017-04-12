@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -93,7 +92,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 		LabelSelector: set.AsSelector(),
 	})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, ConvertError(err)
 	}
 	c.Infof("collectPods(%v) -> %v", set, len(podList.Items))
 	currentPods := make([]v1.Pod, 0)
@@ -121,7 +120,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
 	currentRC, err := rcs.Get(c.replicationController.Name)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	pods := c.Client.Core().Pods(c.replicationController.Namespace)
 	currentPods, err := c.collectPods(currentRC)
@@ -131,7 +130,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("deleting")
 	err = rcs.Delete(c.replicationController.Name, nil)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	if !cascade {
 		c.Infof("cascade not set, returning")
@@ -140,7 +139,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	for _, pod := range currentPods {
 		log.Infof("deleting pod %v", pod.Name)
 		if err := pods.Delete(pod.Name, nil); err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
 	}
 	return nil
@@ -165,7 +164,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
 	err = control.Delete(ctx, true)
 	if err != nil {
-		return trace.Wrap(err)
+		return ConvertError(err)
 	}
 	_, err = rcs.Create(&c.replicationController)
 	return ConvertError(err)
@@ -179,37 +178,27 @@ func (c *RCControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *RCControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	if retryAttempts == 0 {
-		retryAttempts = DefaultRetryAttempts
+func (c *RCControl) Status() error {
+	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
+	currentRC, err := rcs.Get(c.replicationController.Name)
+	if err != nil {
+		return ConvertError(err)
 	}
-	if retryPeriod == 0 {
-		retryPeriod = DefaultRetryPeriod
+	var replicas int32 = 1
+	if currentRC.Spec.Replicas != nil {
+		replicas = *currentRC.Spec.Replicas
 	}
-	c.Infof("Checking status retryAttempts=%v, retryPeriod=%v", retryAttempts, retryPeriod)
-
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
-		rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-		currentRC, err := rcs.Get(c.replicationController.Name)
-		if err != nil {
-			return trace.Wrap(err)
+	if currentRC.Status.Replicas != replicas {
+		return trace.CompareFailed("expected replicas: %v, ready: %#v", replicas, currentRC.Status.Replicas)
+	}
+	pods, err := c.collectPods(currentRC)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	for _, pod := range pods {
+		if pod.Status.Phase != v1.PodRunning {
+			return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
 		}
-		var replicas int32 = 1
-		if currentRC.Spec.Replicas != nil {
-			replicas = *(currentRC.Spec.Replicas)
-		}
-		if currentRC.Status.Replicas != replicas {
-			return trace.CompareFailed("expected replicas: %v, ready: %#v", replicas, currentRC.Status.Replicas)
-		}
-		pods, err := c.collectPods(currentRC)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		for _, pod := range pods {
-			if pod.Status.Phase != v1.PodRunning {
-				return trace.CompareFailed("pod %v is not running yet: %v", pod.Name, pod.Status.Phase)
-			}
-		}
-		return nil
-	})
+	}
+	return nil
 }

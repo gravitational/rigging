@@ -17,7 +17,6 @@ package rigging
 import (
 	"context"
 	"io"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -128,11 +127,7 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *DeploymentControl) Status(ctx context.Context, retryAttempts int, retryPeriod time.Duration) error {
-	return pollStatus(ctx, retryAttempts, retryPeriod, c.status, c.Entry)
-}
-
-func (c *DeploymentControl) status() error {
+func (c *DeploymentControl) Status() error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.deployment.Name)
 	if err != nil {
