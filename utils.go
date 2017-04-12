@@ -30,16 +30,12 @@ const (
 	ActionApply   action = "apply"
 )
 
-// StatusReporter enables an implementor to report status.
-// Status returns nil when the object has been completed
-// and error otherwise.
+// StatusReporter reports the status of the resource.
 type StatusReporter interface {
-	// Status returns the state of the object.
-	// Nil return signifies completion (created/deleted/updated),
-	// while non-nil return specifies an error condition.
+	// Status returns the state of the resource.
+	// Returns nil if successful (created/deleted/updated), otherwise an error
 	Status() error
-	// Infof logs the specified message and argument in this object's
-	// context.
+	// Infof logs the specified message and arguments in context of this resource
 	Infof(message string, args ...interface{})
 }
 
