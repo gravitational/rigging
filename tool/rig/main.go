@@ -27,7 +27,6 @@ import (
 )
 
 func main() {
-	InitLoggerCLI()
 	if err := run(); err != nil {
 		log.Error(trace.DebugReport(err))
 		fmt.Printf("ERROR: %v\n", err.Error())
@@ -42,6 +41,7 @@ func run() error {
 		debug      = app.Flag("debug", "turn on debug logging").Bool()
 		kubeConfig = app.Flag("kubeconfig", "path to kubeconfig").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).String()
 		namespace  = app.Flag("namespace", "Namespace of the changesets").Default(rigging.DefaultNamespace).String()
+		quiet      = app.Flag("quiet", "Suppress program output").Short('q').Bool()
 
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
 		cupsertChangeset = Ref(cupsert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
@@ -88,8 +88,13 @@ func run() error {
 		return trace.Wrap(err)
 	}
 
-	if *debug {
+	switch {
+	case *quiet:
+		TurnOffLogging()
+	case *debug:
 		InitLoggerDebug()
+	default:
+		InitLoggerCLI()
 	}
 
 	client, config, err := getClient(*kubeConfig)
@@ -428,13 +433,11 @@ func InitLoggerCLI() {
 
 	hook, err := logrusSyslog.NewSyslogHook("", "", syslog.LOG_WARNING, "")
 	if err != nil {
-		// syslog not available
-		log.Warn("syslog not available. reverting to stderr")
-	} else {
-		// ... and disable stderr:
-		log.AddHook(hook)
-		log.SetOutput(ioutil.Discard)
+		// Bail out if syslog is not available
+		return
 	}
+	log.AddHook(hook)
+	log.SetOutput(ioutil.Discard)
 }
 
 // InitLoggerDebug configures the logger to dump everything to stderr
@@ -444,6 +447,13 @@ func InitLoggerDebug() {
 	log.SetFormatter(&trace.TextFormatter{})
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
+}
+
+// TurnOffLogging disable logging
+func TurnOffLogging() {
+	log.StandardLogger().Hooks = make(log.LevelHooks)
+	log.SetOutput(ioutil.Discard)
+	log.SetLevel(log.FatalLevel)
 }
 
 const (
