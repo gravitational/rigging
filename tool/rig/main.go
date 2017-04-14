@@ -27,21 +27,23 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	var quiet bool
+	if err := run(&quiet); err != nil {
 		log.Error(trace.DebugReport(err))
-		fmt.Printf("ERROR: %v\n", err.Error())
+		if !quiet {
+			fmt.Printf("ERROR: %v\n", err.Error())
+		}
 		os.Exit(255)
 	}
 }
 
-func run() error {
+func run(quiet *bool) error {
 	var (
 		app = kingpin.New("rig", "CLI utility to simplify K8s updates")
 
 		debug      = app.Flag("debug", "turn on debug logging").Bool()
 		kubeConfig = app.Flag("kubeconfig", "path to kubeconfig").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).String()
 		namespace  = app.Flag("namespace", "Namespace of the changesets").Default(rigging.DefaultNamespace).String()
-		quiet      = app.Flag("quiet", "Suppress program output").Short('q').Bool()
 
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
 		cupsertChangeset = Ref(cupsert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
@@ -82,6 +84,7 @@ func run() error {
 		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
 		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource namespace").Default(rigging.DefaultNamespace).String()
 	)
+	app.Flag("quiet", "Suppress program output").Short('q').BoolVar(quiet)
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
