@@ -111,10 +111,6 @@ func TestHostRegexp(t *testing.T) {
 			input: "xn--n3h.com", // ☃.com in punycode
 			match: true,
 		},
-		{
-			input: "Asdf.com", // uppercase character
-			match: true,
-		},
 	}
 	r := regexp.MustCompile(`^` + hostnameRegexp.String() + `$`)
 	for i := range hostcases {
@@ -123,11 +119,6 @@ func TestHostRegexp(t *testing.T) {
 }
 
 func TestFullNameRegexp(t *testing.T) {
-	if anchoredNameRegexp.NumSubexp() != 2 {
-		t.Fatalf("anchored name regexp should have two submatches: %v, %v != 2",
-			anchoredNameRegexp, anchoredNameRegexp.NumSubexp())
-	}
-
 	testcases := []regexpMatch{
 		{
 			input: "",
@@ -403,14 +394,6 @@ func TestFullNameRegexp(t *testing.T) {
 			match: true,
 			subs:  []string{"registry.io", "foo/project--id.module--name.ver---sion--name"},
 		},
-		{
-			input: "Asdf.com/foo/bar", // uppercase character in hostname
-			match: true,
-		},
-		{
-			input: "Foo/FarB", // uppercase characters in remote name
-			match: false,
-		},
 	}
 	for i := range testcases {
 		checkRegexp(t, anchoredNameRegexp, testcases[i])
@@ -418,11 +401,6 @@ func TestFullNameRegexp(t *testing.T) {
 }
 
 func TestReferenceRegexp(t *testing.T) {
-	if ReferenceRegexp.NumSubexp() != 3 {
-		t.Fatalf("anchored name regexp should have three submatches: %v, %v != 3",
-			ReferenceRegexp, ReferenceRegexp.NumSubexp())
-	}
-
 	testcases := []regexpMatch{
 		{
 			input: "registry.com:8080/myapp:tag",

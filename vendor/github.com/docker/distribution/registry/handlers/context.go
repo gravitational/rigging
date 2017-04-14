@@ -10,7 +10,6 @@ import (
 	"github.com/docker/distribution/digest"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/api/v2"
-	"github.com/docker/distribution/registry/auth"
 	"golang.org/x/net/context"
 )
 
@@ -78,7 +77,7 @@ func getUploadUUID(ctx context.Context) (uuid string) {
 // getUserName attempts to resolve a username from the context and request. If
 // a username cannot be resolved, the empty string is returned.
 func getUserName(ctx context.Context, r *http.Request) string {
-	username := ctxu.GetStringValue(ctx, auth.UserNameKey)
+	username := ctxu.GetStringValue(ctx, "auth.user.name")
 
 	// Fallback to request user with basic auth
 	if username == "" {

@@ -19,9 +19,6 @@ func Test(t *testing.T) { TestingT(t) }
 var configStruct = Configuration{
 	Version: "0.1",
 	Log: struct {
-		AccessLog struct {
-			Disabled bool `yaml:"disabled,omitempty"`
-		} `yaml:"accesslog,omitempty"`
 		Level     Loglevel               `yaml:"level"`
 		Formatter string                 `yaml:"formatter,omitempty"`
 		Fields    map[string]interface{} `yaml:"fields,omitempty"`
@@ -62,52 +59,34 @@ var configStruct = Configuration{
 				Headers: http.Header{
 					"Authorization": []string{"Bearer <example>"},
 				},
-				IgnoredMediaTypes: []string{"application/octet-stream"},
 			},
 		},
 	},
 	HTTP: struct {
-		Addr         string `yaml:"addr,omitempty"`
-		Net          string `yaml:"net,omitempty"`
-		Host         string `yaml:"host,omitempty"`
-		Prefix       string `yaml:"prefix,omitempty"`
-		Secret       string `yaml:"secret,omitempty"`
-		RelativeURLs bool   `yaml:"relativeurls,omitempty"`
-		TLS          struct {
+		Addr   string `yaml:"addr,omitempty"`
+		Net    string `yaml:"net,omitempty"`
+		Host   string `yaml:"host,omitempty"`
+		Prefix string `yaml:"prefix,omitempty"`
+		Secret string `yaml:"secret,omitempty"`
+		TLS    struct {
 			Certificate string   `yaml:"certificate,omitempty"`
 			Key         string   `yaml:"key,omitempty"`
 			ClientCAs   []string `yaml:"clientcas,omitempty"`
-			LetsEncrypt struct {
-				CacheFile string `yaml:"cachefile,omitempty"`
-				Email     string `yaml:"email,omitempty"`
-			} `yaml:"letsencrypt,omitempty"`
 		} `yaml:"tls,omitempty"`
 		Headers http.Header `yaml:"headers,omitempty"`
 		Debug   struct {
 			Addr string `yaml:"addr,omitempty"`
 		} `yaml:"debug,omitempty"`
-		HTTP2 struct {
-			Disabled bool `yaml:"disabled,omitempty"`
-		} `yaml:"http2,omitempty"`
 	}{
 		TLS: struct {
 			Certificate string   `yaml:"certificate,omitempty"`
 			Key         string   `yaml:"key,omitempty"`
 			ClientCAs   []string `yaml:"clientcas,omitempty"`
-			LetsEncrypt struct {
-				CacheFile string `yaml:"cachefile,omitempty"`
-				Email     string `yaml:"email,omitempty"`
-			} `yaml:"letsencrypt,omitempty"`
 		}{
 			ClientCAs: []string{"/path/to/ca.pem"},
 		},
 		Headers: http.Header{
 			"X-Content-Type-Options": []string{"nosniff"},
-		},
-		HTTP2: struct {
-			Disabled bool `yaml:"disabled,omitempty"`
-		}{
-			Disabled: false,
 		},
 	},
 }
@@ -140,8 +119,6 @@ notifications:
       url:  http://example.com
       headers:
         Authorization: [Bearer <example>]
-      ignoredmediatypes:
-        - application/octet-stream
 reporting:
   bugsnag:
     apikey: BugsnagApiKey
@@ -168,8 +145,6 @@ notifications:
       url:  http://example.com
       headers:
         Authorization: [Bearer <example>]
-      ignoredmediatypes:
-        - application/octet-stream
 http:
   headers:
     X-Content-Type-Options: [nosniff]

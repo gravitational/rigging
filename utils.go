@@ -13,12 +13,12 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/errors"
-	"k8s.io/client-go/1.4/pkg/api/unversioned"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/labels"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/errors"
+	"k8s.io/client-go/pkg/api/unversioned"
+	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/labels"
 )
 
 type action string
@@ -100,8 +100,8 @@ func collectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 		set[key] = val
 	}
 
-	podList, err := client.Core().Pods(namespace).List(api.ListOptions{
-		LabelSelector: set.AsSelector(),
+	podList, err := client.Core().Pods(namespace).List(v1.ListOptions{
+		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
 		return nil, ConvertError(err)

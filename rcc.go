@@ -22,10 +22,9 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/labels"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/labels"
 )
 
 // NewRCControl returns new instance of ReplicationController updater
@@ -88,8 +87,8 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 		set[key] = val
 	}
 	pods := c.Client.Core().Pods(replicationController.Namespace)
-	podList, err := pods.List(api.ListOptions{
-		LabelSelector: set.AsSelector(),
+	podList, err := pods.List(v1.ListOptions{
+		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
 		return nil, ConvertError(err)

@@ -21,9 +21,9 @@ import (
 	yaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/rest"
-	"k8s.io/client-go/1.4/tools/clientcmd"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {

@@ -11,7 +11,6 @@ import (
 	"github.com/docker/distribution/digest"
 	"github.com/docker/distribution/manifest"
 	"github.com/docker/distribution/manifest/schema1"
-	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/storage/cache/memory"
 	"github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/inmemory"
@@ -24,14 +23,14 @@ type manifestStoreTestEnv struct {
 	driver     driver.StorageDriver
 	registry   distribution.Namespace
 	repository distribution.Repository
-	name       reference.Named
+	name       string
 	tag        string
 }
 
-func newManifestStoreTestEnv(t *testing.T, name reference.Named, tag string, options ...RegistryOption) *manifestStoreTestEnv {
+func newManifestStoreTestEnv(t *testing.T, name, tag string) *manifestStoreTestEnv {
 	ctx := context.Background()
 	driver := inmemory.New()
-	registry, err := NewRegistry(ctx, driver, options...)
+	registry, err := NewRegistry(ctx, driver, BlobDescriptorCacheProvider(memory.NewInMemoryBlobDescriptorCacheProvider()), EnableDelete, EnableRedirect)
 	if err != nil {
 		t.Fatalf("error creating registry: %v", err)
 	}
@@ -52,27 +51,36 @@ func newManifestStoreTestEnv(t *testing.T, name reference.Named, tag string, opt
 }
 
 func TestManifestStorage(t *testing.T) {
-	k, err := libtrust.GenerateECP256PrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	testManifestStorage(t, BlobDescriptorCacheProvider(memory.NewInMemoryBlobDescriptorCacheProvider()), EnableDelete, EnableRedirect, Schema1SigningKey(k))
-}
-
-func testManifestStorage(t *testing.T, options ...RegistryOption) {
-	repoName, _ := reference.ParseNamed("foo/bar")
-	env := newManifestStoreTestEnv(t, repoName, "thetag", options...)
+	env := newManifestStoreTestEnv(t, "foo/bar", "thetag")
 	ctx := context.Background()
 	ms, err := env.repository.Manifests(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	exists, err := ms.ExistsByTag(env.tag)
+	if err != nil {
+		t.Fatalf("unexpected error checking manifest existence: %v", err)
+	}
+
+	if exists {
+		t.Fatalf("manifest should not exist")
+	}
+
+	if _, err := ms.GetByTag(env.tag); true {
+		switch err.(type) {
+		case distribution.ErrManifestUnknown:
+			break
+		default:
+			t.Fatalf("expected manifest unknown error: %#v", err)
+		}
+	}
+
 	m := schema1.Manifest{
 		Versioned: manifest.Versioned{
 			SchemaVersion: 1,
 		},
-		Name: env.name.Name(),
+		Name: env.name,
 		Tag:  env.tag,
 	}
 
@@ -106,7 +114,7 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Fatalf("error signing manifest: %v", err)
 	}
 
-	_, err = ms.Put(ctx, sm)
+	err = ms.Put(sm)
 	if err == nil {
 		t.Fatalf("expected errors putting manifest with full verification")
 	}
@@ -142,40 +150,30 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		}
 	}
 
-	var manifestDigest digest.Digest
-	if manifestDigest, err = ms.Put(ctx, sm); err != nil {
+	if err = ms.Put(sm); err != nil {
 		t.Fatalf("unexpected error putting manifest: %v", err)
 	}
 
-	exists, err := ms.Exists(ctx, manifestDigest)
+	exists, err = ms.ExistsByTag(env.tag)
 	if err != nil {
-		t.Fatalf("unexpected error checking manifest existence: %#v", err)
+		t.Fatalf("unexpected error checking manifest existence: %v", err)
 	}
 
 	if !exists {
 		t.Fatalf("manifest should exist")
 	}
 
-	fromStore, err := ms.Get(ctx, manifestDigest)
+	fetchedManifest, err := ms.GetByTag(env.tag)
+
 	if err != nil {
 		t.Fatalf("unexpected error fetching manifest: %v", err)
 	}
 
-	fetchedManifest, ok := fromStore.(*schema1.SignedManifest)
-	if !ok {
-		t.Fatalf("unexpected manifest type from signedstore")
+	if !reflect.DeepEqual(fetchedManifest, sm) {
+		t.Fatalf("fetched manifest not equal: %#v != %#v", fetchedManifest, sm)
 	}
 
-	if !bytes.Equal(fetchedManifest.Canonical, sm.Canonical) {
-		t.Fatalf("fetched payload does not match original payload: %q != %q", fetchedManifest.Canonical, sm.Canonical)
-	}
-
-	_, pl, err := fetchedManifest.Payload()
-	if err != nil {
-		t.Fatalf("error getting payload %#v", err)
-	}
-
-	fetchedJWS, err := libtrust.ParsePrettySignature(pl, "signatures")
+	fetchedJWS, err := libtrust.ParsePrettySignature(fetchedManifest.Raw, "signatures")
 	if err != nil {
 		t.Fatalf("unexpected error parsing jws: %v", err)
 	}
@@ -187,9 +185,12 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 
 	// Now that we have a payload, take a moment to check that the manifest is
 	// return by the payload digest.
+	dgst, err := digest.FromBytes(payload)
+	if err != nil {
+		t.Fatalf("error getting manifest digest: %v", err)
+	}
 
-	dgst := digest.FromBytes(payload)
-	exists, err = ms.Exists(ctx, dgst)
+	exists, err = ms.Exists(dgst)
 	if err != nil {
 		t.Fatalf("error checking manifest existence by digest: %v", err)
 	}
@@ -198,18 +199,13 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Fatalf("manifest %s should exist", dgst)
 	}
 
-	fetchedByDigest, err := ms.Get(ctx, dgst)
+	fetchedByDigest, err := ms.Get(dgst)
 	if err != nil {
 		t.Fatalf("unexpected error fetching manifest by digest: %v", err)
 	}
 
-	byDigestManifest, ok := fetchedByDigest.(*schema1.SignedManifest)
-	if !ok {
-		t.Fatalf("unexpected manifest type from signedstore")
-	}
-
-	if !bytes.Equal(byDigestManifest.Canonical, fetchedManifest.Canonical) {
-		t.Fatalf("fetched manifest not equal: %q != %q", byDigestManifest.Canonical, fetchedManifest.Canonical)
+	if !reflect.DeepEqual(fetchedByDigest, fetchedManifest) {
+		t.Fatalf("fetched manifest not equal: %#v != %#v", fetchedByDigest, fetchedManifest)
 	}
 
 	sigs, err := fetchedJWS.Signatures()
@@ -219,6 +215,20 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 
 	if len(sigs) != 1 {
 		t.Fatalf("unexpected number of signatures: %d != %d", len(sigs), 1)
+	}
+
+	// Grabs the tags and check that this tagged manifest is present
+	tags, err := ms.Tags()
+	if err != nil {
+		t.Fatalf("unexpected error fetching tags: %v", err)
+	}
+
+	if len(tags) != 1 {
+		t.Fatalf("unexpected tags returned: %v", tags)
+	}
+
+	if tags[0] != env.tag {
+		t.Fatalf("unexpected tag found in tags: %v != %v", tags, []string{env.tag})
 	}
 
 	// Now, push the same manifest with a different key
@@ -231,12 +241,8 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 	if err != nil {
 		t.Fatalf("unexpected error signing manifest: %v", err)
 	}
-	_, pl, err = sm2.Payload()
-	if err != nil {
-		t.Fatalf("error getting payload %#v", err)
-	}
 
-	jws2, err := libtrust.ParsePrettySignature(pl, "signatures")
+	jws2, err := libtrust.ParsePrettySignature(sm2.Raw, "signatures")
 	if err != nil {
 		t.Fatalf("error parsing signature: %v", err)
 	}
@@ -250,30 +256,31 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Fatalf("unexpected number of signatures: %d != %d", len(sigs2), 1)
 	}
 
-	if manifestDigest, err = ms.Put(ctx, sm2); err != nil {
+	if err = ms.Put(sm2); err != nil {
 		t.Fatalf("unexpected error putting manifest: %v", err)
 	}
 
-	fromStore, err = ms.Get(ctx, manifestDigest)
+	fetched, err := ms.GetByTag(env.tag)
 	if err != nil {
 		t.Fatalf("unexpected error fetching manifest: %v", err)
-	}
-
-	fetched, ok := fromStore.(*schema1.SignedManifest)
-	if !ok {
-		t.Fatalf("unexpected type from signed manifeststore : %T", fetched)
 	}
 
 	if _, err := schema1.Verify(fetched); err != nil {
 		t.Fatalf("unexpected error verifying manifest: %v", err)
 	}
 
-	_, pl, err = fetched.Payload()
+	// Assemble our payload and two signatures to get what we expect!
+	expectedJWS, err := libtrust.NewJSONSignature(payload, sigs[0], sigs2[0])
 	if err != nil {
-		t.Fatalf("error getting payload %#v", err)
+		t.Fatalf("unexpected error merging jws: %v", err)
 	}
 
-	receivedJWS, err := libtrust.ParsePrettySignature(pl, "signatures")
+	expectedSigs, err := expectedJWS.Signatures()
+	if err != nil {
+		t.Fatalf("unexpected error getting expected signatures: %v", err)
+	}
+
+	receivedJWS, err := libtrust.ParsePrettySignature(fetched.Raw, "signatures")
 	if err != nil {
 		t.Fatalf("unexpected error parsing jws: %v", err)
 	}
@@ -287,13 +294,24 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Fatalf("payloads are not equal")
 	}
 
+	receivedSigs, err := receivedJWS.Signatures()
+	if err != nil {
+		t.Fatalf("error getting signatures: %v", err)
+	}
+
+	for i, sig := range receivedSigs {
+		if !bytes.Equal(sig, expectedSigs[i]) {
+			t.Fatalf("mismatched signatures from remote: %v != %v", string(sig), string(expectedSigs[i]))
+		}
+	}
+
 	// Test deleting manifests
-	err = ms.Delete(ctx, dgst)
+	err = ms.Delete(dgst)
 	if err != nil {
 		t.Fatalf("unexpected an error deleting manifest by digest: %v", err)
 	}
 
-	exists, err = ms.Exists(ctx, dgst)
+	exists, err = ms.Exists(dgst)
 	if err != nil {
 		t.Fatalf("Error querying manifest existence")
 	}
@@ -301,7 +319,7 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Errorf("Deleted manifest should not exist")
 	}
 
-	deletedManifest, err := ms.Get(ctx, dgst)
+	deletedManifest, err := ms.Get(dgst)
 	if err == nil {
 		t.Errorf("Unexpected success getting deleted manifest")
 	}
@@ -317,12 +335,12 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 	}
 
 	// Re-upload should restore manifest to a good state
-	_, err = ms.Put(ctx, sm)
+	err = ms.Put(sm)
 	if err != nil {
 		t.Errorf("Error re-uploading deleted manifest")
 	}
 
-	exists, err = ms.Exists(ctx, dgst)
+	exists, err = ms.Exists(dgst)
 	if err != nil {
 		t.Fatalf("Error querying manifest existence")
 	}
@@ -330,7 +348,7 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 		t.Errorf("Restored manifest should exist")
 	}
 
-	deletedManifest, err = ms.Get(ctx, dgst)
+	deletedManifest, err = ms.Get(dgst)
 	if err != nil {
 		t.Errorf("Unexpected error getting manifest")
 	}
@@ -350,7 +368,7 @@ func testManifestStorage(t *testing.T, options ...RegistryOption) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = ms.Delete(ctx, dgst)
+	err = ms.Delete(dgst)
 	if err == nil {
 		t.Errorf("Unexpected success deleting while disabled")
 	}
@@ -367,15 +385,15 @@ func TestLinkPathFuncs(t *testing.T) {
 	}{
 		{
 			repo:       "foo/bar",
-			digest:     "sha256:deadbeaf98fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			digest:     "sha256:deadbeaf",
 			linkPathFn: blobLinkPath,
-			expected:   "/docker/registry/v2/repositories/foo/bar/_layers/sha256/deadbeaf98fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/link",
+			expected:   "/docker/registry/v2/repositories/foo/bar/_layers/sha256/deadbeaf/link",
 		},
 		{
 			repo:       "foo/bar",
-			digest:     "sha256:deadbeaf98fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			digest:     "sha256:deadbeaf",
 			linkPathFn: manifestRevisionLinkPath,
-			expected:   "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/deadbeaf98fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/link",
+			expected:   "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/deadbeaf/link",
 		},
 	} {
 		p, err := testcase.linkPathFn(testcase.repo, testcase.digest)

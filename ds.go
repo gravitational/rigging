@@ -20,11 +20,11 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/1.4/pkg/labels"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/labels"
 )
 
 // NewDSControl returns new instance of DaemonSet updater
@@ -191,8 +191,8 @@ func (c *DSControl) Status() error {
 		return trace.Wrap(err)
 	}
 
-	nodes, err := c.Client.Core().Nodes().List(api.ListOptions{
-		LabelSelector: c.nodeSelector(),
+	nodes, err := c.Client.Core().Nodes().List(v1.ListOptions{
+		LabelSelector: c.nodeSelector().String(),
 	})
 	if err != nil {
 		return ConvertError(err)

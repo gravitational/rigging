@@ -1,13 +1,11 @@
 package v2
 
 import (
-	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
-	"github.com/docker/distribution/reference"
+	"github.com/docker/distribution/digest"
 	"github.com/gorilla/mux"
 )
 
@@ -19,46 +17,40 @@ import (
 // under "/foo/v2/...". Most application will only provide a schema, host and
 // port, such as "https://localhost:5000/".
 type URLBuilder struct {
-	root     *url.URL // url root (ie http://localhost/)
-	router   *mux.Router
-	relative bool
+	root   *url.URL // url root (ie http://localhost/)
+	router *mux.Router
 }
 
 // NewURLBuilder creates a URLBuilder with provided root url object.
-func NewURLBuilder(root *url.URL, relative bool) *URLBuilder {
+func NewURLBuilder(root *url.URL) *URLBuilder {
 	return &URLBuilder{
-		root:     root,
-		router:   Router(),
-		relative: relative,
+		root:   root,
+		router: Router(),
 	}
 }
 
 // NewURLBuilderFromString workes identically to NewURLBuilder except it takes
 // a string argument for the root, returning an error if it is not a valid
 // url.
-func NewURLBuilderFromString(root string, relative bool) (*URLBuilder, error) {
+func NewURLBuilderFromString(root string) (*URLBuilder, error) {
 	u, err := url.Parse(root)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewURLBuilder(u, relative), nil
+	return NewURLBuilder(u), nil
 }
 
 // NewURLBuilderFromRequest uses information from an *http.Request to
 // construct the root url.
-func NewURLBuilderFromRequest(r *http.Request, relative bool) *URLBuilder {
+func NewURLBuilderFromRequest(r *http.Request) *URLBuilder {
 	var scheme string
 
 	forwardedProto := r.Header.Get("X-Forwarded-Proto")
-	// TODO: log the error
-	forwardedHeader, _, _ := parseForwardedHeader(r.Header.Get("Forwarded"))
 
 	switch {
 	case len(forwardedProto) > 0:
 		scheme = forwardedProto
-	case len(forwardedHeader["proto"]) > 0:
-		scheme = forwardedHeader["proto"]
 	case r.TLS != nil:
 		scheme = "https"
 	case len(r.URL.Scheme) > 0:
@@ -68,46 +60,14 @@ func NewURLBuilderFromRequest(r *http.Request, relative bool) *URLBuilder {
 	}
 
 	host := r.Host
-
-	if forwardedHost := r.Header.Get("X-Forwarded-Host"); len(forwardedHost) > 0 {
+	forwardedHost := r.Header.Get("X-Forwarded-Host")
+	if len(forwardedHost) > 0 {
 		// According to the Apache mod_proxy docs, X-Forwarded-Host can be a
 		// comma-separated list of hosts, to which each proxy appends the
 		// requested host. We want to grab the first from this comma-separated
 		// list.
 		hosts := strings.SplitN(forwardedHost, ",", 2)
 		host = strings.TrimSpace(hosts[0])
-	} else if addr, exists := forwardedHeader["for"]; exists {
-		host = addr
-	} else if h, exists := forwardedHeader["host"]; exists {
-		host = h
-	}
-
-	portLessHost, port := host, ""
-	if !isIPv6Address(portLessHost) {
-		// with go 1.6, this would treat the last part of IPv6 address as a port
-		portLessHost, port, _ = net.SplitHostPort(host)
-	}
-	if forwardedPort := r.Header.Get("X-Forwarded-Port"); len(port) == 0 && len(forwardedPort) > 0 {
-		ports := strings.SplitN(forwardedPort, ",", 2)
-		forwardedPort = strings.TrimSpace(ports[0])
-		if _, err := strconv.ParseInt(forwardedPort, 10, 32); err == nil {
-			port = forwardedPort
-		}
-	}
-
-	if len(portLessHost) > 0 {
-		host = portLessHost
-	}
-	if len(port) > 0 {
-		// remove enclosing brackets of ipv6 address otherwise they will be duplicated
-		if len(host) > 1 && host[0] == '[' && host[len(host)-1] == ']' {
-			host = host[1 : len(host)-1]
-		}
-		// JoinHostPort properly encloses ipv6 addresses in square brackets
-		host = net.JoinHostPort(host, port)
-	} else if isIPv6Address(host) && host[0] != '[' {
-		// ipv6 needs to be enclosed in square brackets in urls
-		host = "[" + host + "]"
 	}
 
 	basePath := routeDescriptorsMap[RouteNameBase].Path
@@ -125,7 +85,7 @@ func NewURLBuilderFromRequest(r *http.Request, relative bool) *URLBuilder {
 		u.Path = requestPath[0 : index+1]
 	}
 
-	return NewURLBuilder(u, relative)
+	return NewURLBuilder(u)
 }
 
 // BuildBaseURL constructs a base url for the API, typically just "/v2/".
@@ -153,10 +113,10 @@ func (ub *URLBuilder) BuildCatalogURL(values ...url.Values) (string, error) {
 }
 
 // BuildTagsURL constructs a url to list the tags in the named repository.
-func (ub *URLBuilder) BuildTagsURL(name reference.Named) (string, error) {
+func (ub *URLBuilder) BuildTagsURL(name string) (string, error) {
 	route := ub.cloneRoute(RouteNameTags)
 
-	tagsURL, err := route.URL("name", name.Name())
+	tagsURL, err := route.URL("name", name)
 	if err != nil {
 		return "", err
 	}
@@ -166,18 +126,10 @@ func (ub *URLBuilder) BuildTagsURL(name reference.Named) (string, error) {
 
 // BuildManifestURL constructs a url for the manifest identified by name and
 // reference. The argument reference may be either a tag or digest.
-func (ub *URLBuilder) BuildManifestURL(ref reference.Named) (string, error) {
+func (ub *URLBuilder) BuildManifestURL(name, reference string) (string, error) {
 	route := ub.cloneRoute(RouteNameManifest)
 
-	tagOrDigest := ""
-	switch v := ref.(type) {
-	case reference.Tagged:
-		tagOrDigest = v.Tag()
-	case reference.Digested:
-		tagOrDigest = v.Digest().String()
-	}
-
-	manifestURL, err := route.URL("name", ref.Name(), "reference", tagOrDigest)
+	manifestURL, err := route.URL("name", name, "reference", reference)
 	if err != nil {
 		return "", err
 	}
@@ -186,10 +138,10 @@ func (ub *URLBuilder) BuildManifestURL(ref reference.Named) (string, error) {
 }
 
 // BuildBlobURL constructs the url for the blob identified by name and dgst.
-func (ub *URLBuilder) BuildBlobURL(ref reference.Canonical) (string, error) {
+func (ub *URLBuilder) BuildBlobURL(name string, dgst digest.Digest) (string, error) {
 	route := ub.cloneRoute(RouteNameBlob)
 
-	layerURL, err := route.URL("name", ref.Name(), "digest", ref.Digest().String())
+	layerURL, err := route.URL("name", name, "digest", dgst.String())
 	if err != nil {
 		return "", err
 	}
@@ -199,10 +151,10 @@ func (ub *URLBuilder) BuildBlobURL(ref reference.Canonical) (string, error) {
 
 // BuildBlobUploadURL constructs a url to begin a blob upload in the
 // repository identified by name.
-func (ub *URLBuilder) BuildBlobUploadURL(name reference.Named, values ...url.Values) (string, error) {
+func (ub *URLBuilder) BuildBlobUploadURL(name string, values ...url.Values) (string, error) {
 	route := ub.cloneRoute(RouteNameBlobUpload)
 
-	uploadURL, err := route.URL("name", name.Name())
+	uploadURL, err := route.URL("name", name)
 	if err != nil {
 		return "", err
 	}
@@ -214,10 +166,10 @@ func (ub *URLBuilder) BuildBlobUploadURL(name reference.Named, values ...url.Val
 // including any url values. This should generally not be used by clients, as
 // this url is provided by server implementations during the blob upload
 // process.
-func (ub *URLBuilder) BuildBlobUploadChunkURL(name reference.Named, uuid string, values ...url.Values) (string, error) {
+func (ub *URLBuilder) BuildBlobUploadChunkURL(name, uuid string, values ...url.Values) (string, error) {
 	route := ub.cloneRoute(RouteNameBlobUploadChunk)
 
-	uploadURL, err := route.URL("name", name.Name(), "uuid", uuid)
+	uploadURL, err := route.URL("name", name, "uuid", uuid)
 	if err != nil {
 		return "", err
 	}
@@ -234,13 +186,12 @@ func (ub *URLBuilder) cloneRoute(name string) clonedRoute {
 	*route = *ub.router.GetRoute(name) // clone the route
 	*root = *ub.root
 
-	return clonedRoute{Route: route, root: root, relative: ub.relative}
+	return clonedRoute{Route: route, root: root}
 }
 
 type clonedRoute struct {
 	*mux.Route
-	root     *url.URL
-	relative bool
+	root *url.URL
 }
 
 func (cr clonedRoute) URL(pairs ...string) (*url.URL, error) {
@@ -249,17 +200,11 @@ func (cr clonedRoute) URL(pairs ...string) (*url.URL, error) {
 		return nil, err
 	}
 
-	if cr.relative {
-		return routeURL, nil
-	}
-
 	if routeURL.Scheme == "" && routeURL.User == nil && routeURL.Host == "" {
 		routeURL.Path = routeURL.Path[1:]
 	}
 
-	url := cr.root.ResolveReference(routeURL)
-	url.Scheme = cr.root.Scheme
-	return url, nil
+	return cr.root.ResolveReference(routeURL), nil
 }
 
 // appendValuesURL appends the parameters to the url.
@@ -286,29 +231,4 @@ func appendValues(u string, values ...url.Values) string {
 	}
 
 	return appendValuesURL(up, values...).String()
-}
-
-// isIPv6Address returns true if given string is a valid IPv6 address. No port is allowed. The address may be
-// enclosed in square brackets.
-func isIPv6Address(host string) bool {
-	if len(host) > 1 && host[0] == '[' && host[len(host)-1] == ']' {
-		host = host[1 : len(host)-1]
-	}
-	// The IPv6 scoped addressing zone identifier starts after the last percent sign.
-	if i := strings.LastIndexByte(host, '%'); i > 0 {
-		host = host[:i]
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	if ip.To16() == nil {
-		return false
-	}
-	if ip.To4() == nil {
-		return true
-	}
-	// dot can be present in ipv4-mapped address, it needs to come after a colon though
-	i := strings.IndexAny(host, ":.")
-	return i >= 0 && host[i] == ':'
 }

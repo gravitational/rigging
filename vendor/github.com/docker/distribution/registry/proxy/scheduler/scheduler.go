@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"github.com/docker/distribution/context"
-	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/storage/driver"
 )
 
 // onTTLExpiryFunc is called when a repository's TTL expires
-type expiryFunc func(reference.Reference) error
+type expiryFunc func(string) error
 
 const (
 	entryTypeBlob = iota
@@ -81,20 +80,19 @@ func (ttles *TTLExpirationScheduler) OnManifestExpire(f expiryFunc) {
 }
 
 // AddBlob schedules a blob cleanup after ttl expires
-func (ttles *TTLExpirationScheduler) AddBlob(blobRef reference.Canonical, ttl time.Duration) error {
+func (ttles *TTLExpirationScheduler) AddBlob(dgst string, ttl time.Duration) error {
 	ttles.Lock()
 	defer ttles.Unlock()
 
 	if ttles.stopped {
 		return fmt.Errorf("scheduler not started")
 	}
-
-	ttles.add(blobRef, ttl, entryTypeBlob)
+	ttles.add(dgst, ttl, entryTypeBlob)
 	return nil
 }
 
 // AddManifest schedules a manifest cleanup after ttl expires
-func (ttles *TTLExpirationScheduler) AddManifest(manifestRef reference.Canonical, ttl time.Duration) error {
+func (ttles *TTLExpirationScheduler) AddManifest(repoName string, ttl time.Duration) error {
 	ttles.Lock()
 	defer ttles.Unlock()
 
@@ -102,7 +100,7 @@ func (ttles *TTLExpirationScheduler) AddManifest(manifestRef reference.Canonical
 		return fmt.Errorf("scheduler not started")
 	}
 
-	ttles.add(manifestRef, ttl, entryTypeManifest)
+	ttles.add(repoName, ttl, entryTypeManifest)
 	return nil
 }
 
@@ -134,12 +132,11 @@ func (ttles *TTLExpirationScheduler) Start() error {
 		for {
 			select {
 			case <-ttles.saveTimer.C:
-				ttles.Lock()
 				if !ttles.indexDirty {
-					ttles.Unlock()
 					continue
 				}
 
+				ttles.Lock()
 				err := ttles.writeState()
 				if err != nil {
 					context.GetLogger(ttles.ctx).Errorf("Error writing scheduler state: %s", err)
@@ -157,17 +154,17 @@ func (ttles *TTLExpirationScheduler) Start() error {
 	return nil
 }
 
-func (ttles *TTLExpirationScheduler) add(r reference.Reference, ttl time.Duration, eType int) {
+func (ttles *TTLExpirationScheduler) add(key string, ttl time.Duration, eType int) {
 	entry := &schedulerEntry{
-		Key:       r.String(),
+		Key:       key,
 		Expiry:    time.Now().Add(ttl),
 		EntryType: eType,
 	}
 	context.GetLogger(ttles.ctx).Infof("Adding new scheduler entry for %s with ttl=%s", entry.Key, entry.Expiry.Sub(time.Now()))
-	if oldEntry, present := ttles.entries[entry.Key]; present && oldEntry.timer != nil {
+	if oldEntry, present := ttles.entries[key]; present && oldEntry.timer != nil {
 		oldEntry.timer.Stop()
 	}
-	ttles.entries[entry.Key] = entry
+	ttles.entries[key] = entry
 	entry.timer = ttles.startTimer(entry, ttl)
 	ttles.indexDirty = true
 }
@@ -185,18 +182,13 @@ func (ttles *TTLExpirationScheduler) startTimer(entry *schedulerEntry, ttl time.
 		case entryTypeManifest:
 			f = ttles.onManifestExpire
 		default:
-			f = func(reference.Reference) error {
-				return fmt.Errorf("scheduler entry type")
+			f = func(repoName string) error {
+				return fmt.Errorf("Unexpected scheduler entry type")
 			}
 		}
 
-		ref, err := reference.Parse(entry.Key)
-		if err == nil {
-			if err := f(ref); err != nil {
-				context.GetLogger(ttles.ctx).Errorf("Scheduler error returned from OnExpire(%s): %s", entry.Key, err)
-			}
-		} else {
-			context.GetLogger(ttles.ctx).Errorf("Error unpacking reference: %s", err)
+		if err := f(entry.Key); err != nil {
+			context.GetLogger(ttles.ctx).Errorf("Scheduler error returned from OnExpire(%s): %s", entry.Key, err)
 		}
 
 		delete(ttles.entries, entry.Key)
@@ -255,5 +247,6 @@ func (ttles *TTLExpirationScheduler) readState() error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }

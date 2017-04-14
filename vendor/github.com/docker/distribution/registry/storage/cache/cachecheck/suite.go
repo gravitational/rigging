@@ -1,7 +1,6 @@
 package cachecheck
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/docker/distribution"
@@ -16,13 +15,12 @@ import (
 func CheckBlobDescriptorCache(t *testing.T, provider cache.BlobDescriptorCacheProvider) {
 	ctx := context.Background()
 
-	checkBlobDescriptorCacheEmptyRepository(ctx, t, provider)
-	checkBlobDescriptorCacheSetAndRead(ctx, t, provider)
-	checkBlobDescriptorCacheClear(ctx, t, provider)
+	checkBlobDescriptorCacheEmptyRepository(t, ctx, provider)
+	checkBlobDescriptorCacheSetAndRead(t, ctx, provider)
 }
 
-func checkBlobDescriptorCacheEmptyRepository(ctx context.Context, t *testing.T, provider cache.BlobDescriptorCacheProvider) {
-	if _, err := provider.Stat(ctx, "sha384:abc111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"); err != distribution.ErrBlobUnknown {
+func checkBlobDescriptorCacheEmptyRepository(t *testing.T, ctx context.Context, provider cache.BlobDescriptorCacheProvider) {
+	if _, err := provider.Stat(ctx, "sha384:abc"); err != distribution.ErrBlobUnknown {
 		t.Fatalf("expected unknown blob error with empty store: %v", err)
 	}
 
@@ -43,7 +41,7 @@ func checkBlobDescriptorCacheEmptyRepository(ctx context.Context, t *testing.T, 
 		t.Fatalf("expected error with invalid digest: %v", err)
 	}
 
-	if err := cache.SetDescriptor(ctx, "sha384:abc111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", distribution.Descriptor{
+	if err := cache.SetDescriptor(ctx, "sha384:abc", distribution.Descriptor{
 		Digest:    "",
 		Size:      10,
 		MediaType: "application/octet-stream"}); err == nil {
@@ -54,15 +52,15 @@ func checkBlobDescriptorCacheEmptyRepository(ctx context.Context, t *testing.T, 
 		t.Fatalf("expected error checking for cache item with empty digest: %v", err)
 	}
 
-	if _, err := cache.Stat(ctx, "sha384:abc111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"); err != distribution.ErrBlobUnknown {
+	if _, err := cache.Stat(ctx, "sha384:abc"); err != distribution.ErrBlobUnknown {
 		t.Fatalf("expected unknown blob error with empty repo: %v", err)
 	}
 }
 
-func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provider cache.BlobDescriptorCacheProvider) {
-	localDigest := digest.Digest("sha384:abc111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+func checkBlobDescriptorCacheSetAndRead(t *testing.T, ctx context.Context, provider cache.BlobDescriptorCacheProvider) {
+	localDigest := digest.Digest("sha384:abc")
 	expected := distribution.Descriptor{
-		Digest:    "sha256:abc1111111111111111111111111111111111111111111111111111111111111",
+		Digest:    "sha256:abc",
 		Size:      10,
 		MediaType: "application/octet-stream"}
 
@@ -80,7 +78,7 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 		t.Fatalf("unexpected error statting fake2:abc: %v", err)
 	}
 
-	if !reflect.DeepEqual(expected, desc) {
+	if expected != desc {
 		t.Fatalf("unexpected descriptor: %#v != %#v", expected, desc)
 	}
 
@@ -90,7 +88,7 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 		t.Fatalf("descriptor not returned for canonical key: %v", err)
 	}
 
-	if !reflect.DeepEqual(expected, desc) {
+	if expected != desc {
 		t.Fatalf("unexpected descriptor: %#v != %#v", expected, desc)
 	}
 
@@ -100,7 +98,7 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 		t.Fatalf("expected blob unknown in global cache: %v, %v", err, desc)
 	}
 
-	if !reflect.DeepEqual(desc, expected) {
+	if desc != expected {
 		t.Fatalf("unexpected descriptor: %#v != %#v", expected, desc)
 	}
 
@@ -110,7 +108,7 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 		t.Fatalf("unexpected error checking glboal descriptor: %v", err)
 	}
 
-	if !reflect.DeepEqual(desc, expected) {
+	if desc != expected {
 		t.Fatalf("unexpected descriptor: %#v != %#v", expected, desc)
 	}
 
@@ -127,7 +125,7 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 		t.Fatalf("unexpected error getting descriptor: %v", err)
 	}
 
-	if !reflect.DeepEqual(desc, expected) {
+	if desc != expected {
 		t.Fatalf("unexpected descriptor: %#v != %#v", desc, expected)
 	}
 
@@ -138,15 +136,15 @@ func checkBlobDescriptorCacheSetAndRead(ctx context.Context, t *testing.T, provi
 
 	expected.MediaType = "application/octet-stream" // expect original mediatype in global
 
-	if !reflect.DeepEqual(desc, expected) {
+	if desc != expected {
 		t.Fatalf("unexpected descriptor: %#v != %#v", desc, expected)
 	}
 }
 
-func checkBlobDescriptorCacheClear(ctx context.Context, t *testing.T, provider cache.BlobDescriptorCacheProvider) {
-	localDigest := digest.Digest("sha384:def111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+func checkBlobDescriptorClear(t *testing.T, ctx context.Context, provider cache.BlobDescriptorCacheProvider) {
+	localDigest := digest.Digest("sha384:abc")
 	expected := distribution.Descriptor{
-		Digest:    "sha256:def1111111111111111111111111111111111111111111111111111111111111",
+		Digest:    "sha256:abc",
 		Size:      10,
 		MediaType: "application/octet-stream"}
 
@@ -164,17 +162,18 @@ func checkBlobDescriptorCacheClear(ctx context.Context, t *testing.T, provider c
 		t.Fatalf("unexpected error statting fake2:abc: %v", err)
 	}
 
-	if !reflect.DeepEqual(expected, desc) {
+	if expected != desc {
 		t.Fatalf("unexpected descriptor: %#v != %#v", expected, desc)
 	}
 
 	err = cache.Clear(ctx, localDigest)
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("unexpected error deleting descriptor")
 	}
 
-	desc, err = cache.Stat(ctx, localDigest)
+	nonExistantDigest := digest.Digest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	err = cache.Clear(ctx, nonExistantDigest)
 	if err == nil {
-		t.Fatalf("expected error statting deleted blob: %v", err)
+		t.Fatalf("expected error deleting unknown descriptor")
 	}
 }
