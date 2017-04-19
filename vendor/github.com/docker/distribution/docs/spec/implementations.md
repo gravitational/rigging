@@ -1,7 +1,3 @@
----
-published: false
----
-
 # Distribution API Implementations
 
 This is a list of known implementations of the Distribution API spec.

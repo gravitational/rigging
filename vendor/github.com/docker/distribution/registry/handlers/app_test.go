@@ -16,7 +16,7 @@ import (
 	_ "github.com/docker/distribution/registry/auth/silly"
 	"github.com/docker/distribution/registry/storage"
 	memorycache "github.com/docker/distribution/registry/storage/cache/memory"
-	"github.com/docker/distribution/registry/storage/driver/testdriver"
+	"github.com/docker/distribution/registry/storage/driver/inmemory"
 )
 
 // TestAppDispatcher builds an application with a test dispatcher and ensures
@@ -24,7 +24,7 @@ import (
 // This only tests the dispatch mechanism. The underlying dispatchers must be
 // tested individually.
 func TestAppDispatcher(t *testing.T) {
-	driver := testdriver.New()
+	driver := inmemory.New()
 	ctx := context.Background()
 	registry, err := storage.NewRegistry(ctx, driver, storage.BlobDescriptorCacheProvider(memorycache.NewInMemoryBlobDescriptorCacheProvider()), storage.EnableDelete, storage.EnableRedirect)
 	if err != nil {
@@ -38,7 +38,6 @@ func TestAppDispatcher(t *testing.T) {
 		registry: registry,
 	}
 	server := httptest.NewServer(app)
-	defer server.Close()
 	router := v2.Router()
 
 	serverURL, err := url.Parse(server.URL)
@@ -49,8 +48,8 @@ func TestAppDispatcher(t *testing.T) {
 	varCheckingDispatcher := func(expectedVars map[string]string) dispatchFunc {
 		return func(ctx *Context, r *http.Request) http.Handler {
 			// Always checks the same name context
-			if ctx.Repository.Named().Name() != getName(ctx) {
-				t.Fatalf("unexpected name: %q != %q", ctx.Repository.Named().Name(), "foo/bar")
+			if ctx.Repository.Name() != getName(ctx) {
+				t.Fatalf("unexpected name: %q != %q", ctx.Repository.Name(), "foo/bar")
 			}
 
 			// Check that we have all that is expected
@@ -104,6 +103,13 @@ func TestAppDispatcher(t *testing.T) {
 			},
 		},
 		{
+			endpoint: v2.RouteNameBlob,
+			vars: []string{
+				"name", "foo/bar",
+				"digest", "tarsum.v1+bogus:abcdef0123456789",
+			},
+		},
+		{
 			endpoint: v2.RouteNameBlobUpload,
 			vars: []string{
 				"name", "foo/bar",
@@ -143,10 +149,7 @@ func TestNewApp(t *testing.T) {
 	ctx := context.Background()
 	config := configuration.Configuration{
 		Storage: configuration.Storage{
-			"testdriver": nil,
-			"maintenance": configuration.Parameters{"uploadpurging": map[interface{}]interface{}{
-				"enabled": false,
-			}},
+			"inmemory": nil,
 		},
 		Auth: configuration.Auth{
 			// For now, we simply test that new auth results in a viable
@@ -164,8 +167,7 @@ func TestNewApp(t *testing.T) {
 	app := NewApp(ctx, &config)
 
 	server := httptest.NewServer(app)
-	defer server.Close()
-	builder, err := v2.NewURLBuilderFromString(server.URL, false)
+	builder, err := v2.NewURLBuilderFromString(server.URL)
 	if err != nil {
 		t.Fatalf("error creating urlbuilder: %v", err)
 	}

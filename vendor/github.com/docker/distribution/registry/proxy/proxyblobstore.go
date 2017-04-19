@@ -10,7 +10,6 @@ import (
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/context"
 	"github.com/docker/distribution/digest"
-	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/proxy/scheduler"
 )
 
@@ -18,11 +17,9 @@ import (
 const blobTTL = time.Duration(24 * 7 * time.Hour)
 
 type proxyBlobStore struct {
-	localStore     distribution.BlobStore
-	remoteStore    distribution.BlobService
-	scheduler      *scheduler.TTLExpirationScheduler
-	repositoryName reference.Named
-	authChallenger authChallenger
+	localStore  distribution.BlobStore
+	remoteStore distribution.BlobService
+	scheduler   *scheduler.TTLExpirationScheduler
 }
 
 var _ distribution.BlobStore = &proxyBlobStore{}
@@ -54,8 +51,6 @@ func (pbs *proxyBlobStore) copyContent(ctx context.Context, dgst digest.Digest, 
 	if err != nil {
 		return distribution.Descriptor{}, err
 	}
-
-	defer remoteReader.Close()
 
 	_, err = io.CopyN(writer, remoteReader, desc.Size)
 	if err != nil {
@@ -124,10 +119,6 @@ func (pbs *proxyBlobStore) ServeBlob(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 
-	if err := pbs.authChallenger.tryEstablishChallenges(ctx); err != nil {
-		return err
-	}
-
 	mu.Lock()
 	_, ok := inflight[dgst]
 	if ok {
@@ -142,14 +133,7 @@ func (pbs *proxyBlobStore) ServeBlob(ctx context.Context, w http.ResponseWriter,
 		if err := pbs.storeLocal(ctx, dgst); err != nil {
 			context.GetLogger(ctx).Errorf("Error committing to storage: %s", err.Error())
 		}
-
-		blobRef, err := reference.WithDigest(pbs.repositoryName, dgst)
-		if err != nil {
-			context.GetLogger(ctx).Errorf("Error creating reference: %s", err)
-			return
-		}
-
-		pbs.scheduler.AddBlob(blobRef, repositoryTTL)
+		pbs.scheduler.AddBlob(dgst.String(), repositoryTTL)
 	}(dgst)
 
 	_, err = pbs.copyContent(ctx, dgst, w)
@@ -169,33 +153,7 @@ func (pbs *proxyBlobStore) Stat(ctx context.Context, dgst digest.Digest) (distri
 		return distribution.Descriptor{}, err
 	}
 
-	if err := pbs.authChallenger.tryEstablishChallenges(ctx); err != nil {
-		return distribution.Descriptor{}, err
-	}
-
 	return pbs.remoteStore.Stat(ctx, dgst)
-}
-
-func (pbs *proxyBlobStore) Get(ctx context.Context, dgst digest.Digest) ([]byte, error) {
-	blob, err := pbs.localStore.Get(ctx, dgst)
-	if err == nil {
-		return blob, nil
-	}
-
-	if err := pbs.authChallenger.tryEstablishChallenges(ctx); err != nil {
-		return []byte{}, err
-	}
-
-	blob, err = pbs.remoteStore.Get(ctx, dgst)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	_, err = pbs.localStore.Put(ctx, "", blob)
-	if err != nil {
-		return []byte{}, err
-	}
-	return blob, nil
 }
 
 // Unsupported functions
@@ -203,7 +161,7 @@ func (pbs *proxyBlobStore) Put(ctx context.Context, mediaType string, p []byte) 
 	return distribution.Descriptor{}, distribution.ErrUnsupported
 }
 
-func (pbs *proxyBlobStore) Create(ctx context.Context, options ...distribution.BlobCreateOption) (distribution.BlobWriter, error) {
+func (pbs *proxyBlobStore) Create(ctx context.Context) (distribution.BlobWriter, error) {
 	return nil, distribution.ErrUnsupported
 }
 
@@ -211,11 +169,11 @@ func (pbs *proxyBlobStore) Resume(ctx context.Context, id string) (distribution.
 	return nil, distribution.ErrUnsupported
 }
 
-func (pbs *proxyBlobStore) Mount(ctx context.Context, sourceRepo reference.Named, dgst digest.Digest) (distribution.Descriptor, error) {
-	return distribution.Descriptor{}, distribution.ErrUnsupported
+func (pbs *proxyBlobStore) Open(ctx context.Context, dgst digest.Digest) (distribution.ReadSeekCloser, error) {
+	return nil, distribution.ErrUnsupported
 }
 
-func (pbs *proxyBlobStore) Open(ctx context.Context, dgst digest.Digest) (distribution.ReadSeekCloser, error) {
+func (pbs *proxyBlobStore) Get(ctx context.Context, dgst digest.Digest) ([]byte, error) {
 	return nil, distribution.ErrUnsupported
 }
 

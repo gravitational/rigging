@@ -9,9 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
-	"runtime"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -21,7 +18,6 @@ import (
 	"github.com/docker/distribution/health"
 	"github.com/docker/distribution/health/checks"
 	"github.com/docker/distribution/notifications"
-	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/api/v2"
 	"github.com/docker/distribution/registry/auth"
@@ -34,8 +30,6 @@ import (
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
 	storagemiddleware "github.com/docker/distribution/registry/storage/driver/middleware"
-	"github.com/docker/distribution/version"
-	"github.com/docker/libtrust"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
@@ -73,27 +67,22 @@ type App struct {
 
 	redis *redis.Pool
 
-	// trustKey is a deprecated key used to sign manifests converted to
-	// schema1 for backward compatibility. It should not be used for any
-	// other purposes.
-	trustKey libtrust.PrivateKey
-
-	// isCache is true if this registry is configured as a pull through cache
+	// true if this registry is configured as a pull through cache
 	isCache bool
 
-	// readOnly is true if the registry is in a read-only maintenance mode
+	// true if the registry is in a read-only maintenance mode
 	readOnly bool
 }
 
 // NewApp takes a configuration and returns a configured app, ready to serve
 // requests. The app only implements ServeHTTP and can be wrapped in other
 // handlers accordingly.
-func NewApp(ctx context.Context, config *configuration.Configuration) *App {
+func NewApp(ctx context.Context, configuration *configuration.Configuration) *App {
 	app := &App{
-		Config:  config,
+		Config:  configuration,
 		Context: ctx,
-		router:  v2.RouterWithPrefix(config.HTTP.Prefix),
-		isCache: config.Proxy.RemoteURL != "",
+		router:  v2.RouterWithPrefix(configuration.HTTP.Prefix),
+		isCache: configuration.Proxy.RemoteURL != "",
 	}
 
 	// Register the handler dispatchers.
@@ -107,15 +96,8 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 	app.register(v2.RouteNameBlobUpload, blobUploadDispatcher)
 	app.register(v2.RouteNameBlobUploadChunk, blobUploadDispatcher)
 
-	// override the storage driver's UA string for registry outbound HTTP requests
-	storageParams := config.Storage.Parameters()
-	if storageParams == nil {
-		storageParams = make(configuration.Parameters)
-	}
-	storageParams["useragent"] = fmt.Sprintf("docker-distribution/%s %s", version.Version, runtime.Version())
-
 	var err error
-	app.driver, err = factory.Create(config.Storage.Type(), storageParams)
+	app.driver, err = factory.Create(configuration.Storage.Type(), configuration.Storage.Parameters())
 	if err != nil {
 		// TODO(stevvooe): Move the creation of a service into a protected
 		// method, where this is created lazily. Its status can be queried via
@@ -124,7 +106,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 	}
 
 	purgeConfig := uploadPurgeDefaultConfig()
-	if mc, ok := config.Storage["maintenance"]; ok {
+	if mc, ok := configuration.Storage["maintenance"]; ok {
 		if v, ok := mc["uploadpurging"]; ok {
 			purgeConfig, ok = v.(map[interface{}]interface{})
 			if !ok {
@@ -147,47 +129,32 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 
 	startUploadPurger(app, app.driver, ctxu.GetLogger(app), purgeConfig)
 
-	app.driver, err = applyStorageMiddleware(app.driver, config.Middleware["storage"])
+	app.driver, err = applyStorageMiddleware(app.driver, configuration.Middleware["storage"])
 	if err != nil {
 		panic(err)
 	}
 
-	app.configureSecret(config)
-	app.configureEvents(config)
-	app.configureRedis(config)
-	app.configureLogHook(config)
+	app.configureSecret(configuration)
+	app.configureEvents(configuration)
+	app.configureRedis(configuration)
+	app.configureLogHook(configuration)
 
-	options := registrymiddleware.GetRegistryOptions()
-	if config.Compatibility.Schema1.TrustKey != "" {
-		app.trustKey, err = libtrust.LoadKeyFile(config.Compatibility.Schema1.TrustKey)
-		if err != nil {
-			panic(fmt.Sprintf(`could not load schema1 "signingkey" parameter: %v`, err))
-		}
-	} else {
-		// Generate an ephemeral key to be used for signing converted manifests
-		// for clients that don't support schema2.
-		app.trustKey, err = libtrust.GenerateECP256PrivateKey()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	options = append(options, storage.Schema1SigningKey(app.trustKey))
-
-	if config.HTTP.Host != "" {
-		u, err := url.Parse(config.HTTP.Host)
+	if configuration.HTTP.Host != "" {
+		u, err := url.Parse(configuration.HTTP.Host)
 		if err != nil {
 			panic(fmt.Sprintf(`could not parse http "host" parameter: %v`, err))
 		}
 		app.httpHost = *u
 	}
 
+	options := []storage.RegistryOption{}
+
 	if app.isCache {
 		options = append(options, storage.DisableDigestResumption)
 	}
 
 	// configure deletion
-	if d, ok := config.Storage["delete"]; ok {
+	if d, ok := configuration.Storage["delete"]; ok {
 		e, ok := d["enabled"]
 		if ok {
 			if deleteEnabled, ok := e.(bool); ok && deleteEnabled {
@@ -198,7 +165,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 
 	// configure redirects
 	var redirectDisabled bool
-	if redirectConfig, ok := config.Storage["redirect"]; ok {
+	if redirectConfig, ok := configuration.Storage["redirect"]; ok {
 		v := redirectConfig["disable"]
 		switch v := v.(type) {
 		case bool:
@@ -213,41 +180,8 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 		options = append(options, storage.EnableRedirect)
 	}
 
-	// configure validation
-	if config.Validation.Enabled {
-		if len(config.Validation.Manifests.URLs.Allow) == 0 && len(config.Validation.Manifests.URLs.Deny) == 0 {
-			// If Allow and Deny are empty, allow nothing.
-			options = append(options, storage.ManifestURLsAllowRegexp(regexp.MustCompile("^$")))
-		} else {
-			if len(config.Validation.Manifests.URLs.Allow) > 0 {
-				for i, s := range config.Validation.Manifests.URLs.Allow {
-					// Validate via compilation.
-					if _, err := regexp.Compile(s); err != nil {
-						panic(fmt.Sprintf("validation.manifests.urls.allow: %s", err))
-					}
-					// Wrap with non-capturing group.
-					config.Validation.Manifests.URLs.Allow[i] = fmt.Sprintf("(?:%s)", s)
-				}
-				re := regexp.MustCompile(strings.Join(config.Validation.Manifests.URLs.Allow, "|"))
-				options = append(options, storage.ManifestURLsAllowRegexp(re))
-			}
-			if len(config.Validation.Manifests.URLs.Deny) > 0 {
-				for i, s := range config.Validation.Manifests.URLs.Deny {
-					// Validate via compilation.
-					if _, err := regexp.Compile(s); err != nil {
-						panic(fmt.Sprintf("validation.manifests.urls.deny: %s", err))
-					}
-					// Wrap with non-capturing group.
-					config.Validation.Manifests.URLs.Deny[i] = fmt.Sprintf("(?:%s)", s)
-				}
-				re := regexp.MustCompile(strings.Join(config.Validation.Manifests.URLs.Deny, "|"))
-				options = append(options, storage.ManifestURLsDenyRegexp(re))
-			}
-		}
-	}
-
 	// configure storage caches
-	if cc, ok := config.Storage["cache"]; ok {
+	if cc, ok := configuration.Storage["cache"]; ok {
 		v, ok := cc["blobdescriptor"]
 		if !ok {
 			// Backwards compatible: "layerinfo" == "blobdescriptor"
@@ -276,7 +210,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 			ctxu.GetLogger(app).Infof("using inmemory blob descriptor cache")
 		default:
 			if v != "" {
-				ctxu.GetLogger(app).Warnf("unknown cache type %q, caching disabled", config.Storage["cache"])
+				ctxu.GetLogger(app).Warnf("unknown cache type %q, caching disabled", configuration.Storage["cache"])
 			}
 		}
 	}
@@ -289,15 +223,15 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 		}
 	}
 
-	app.registry, err = applyRegistryMiddleware(app, app.registry, config.Middleware["registry"])
+	app.registry, err = applyRegistryMiddleware(app.Context, app.registry, configuration.Middleware["registry"])
 	if err != nil {
 		panic(err)
 	}
 
-	authType := config.Auth.Type()
+	authType := configuration.Auth.Type()
 
 	if authType != "" {
-		accessController, err := auth.GetAccessController(config.Auth.Type(), config.Auth.Parameters())
+		accessController, err := auth.GetAccessController(configuration.Auth.Type(), configuration.Auth.Parameters())
 		if err != nil {
 			panic(fmt.Sprintf("unable to configure authorization (%s): %v", authType, err))
 		}
@@ -306,13 +240,13 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 	}
 
 	// configure as a pull through cache
-	if config.Proxy.RemoteURL != "" {
-		app.registry, err = proxy.NewRegistryPullThroughCache(ctx, app.registry, app.driver, config.Proxy)
+	if configuration.Proxy.RemoteURL != "" {
+		app.registry, err = proxy.NewRegistryPullThroughCache(ctx, app.registry, app.driver, configuration.Proxy)
 		if err != nil {
 			panic(err.Error())
 		}
 		app.isCache = true
-		ctxu.GetLogger(app).Info("Registry configured as a proxy cache to ", config.Proxy.RemoteURL)
+		ctxu.GetLogger(app).Info("Registry configured as a proxy cache to ", configuration.Proxy.RemoteURL)
 	}
 
 	return app
@@ -427,17 +361,16 @@ func (app *App) configureEvents(configuration *configuration.Configuration) {
 
 		ctxu.GetLogger(app).Infof("configuring endpoint %v (%v), timeout=%s, headers=%v", endpoint.Name, endpoint.URL, endpoint.Timeout, endpoint.Headers)
 		endpoint := notifications.NewEndpoint(endpoint.Name, endpoint.URL, notifications.EndpointConfig{
-			Timeout:           endpoint.Timeout,
-			Threshold:         endpoint.Threshold,
-			Backoff:           endpoint.Backoff,
-			Headers:           endpoint.Headers,
-			IgnoredMediaTypes: endpoint.IgnoredMediaTypes,
+			Timeout:   endpoint.Timeout,
+			Threshold: endpoint.Threshold,
+			Backoff:   endpoint.Backoff,
+			Headers:   endpoint.Headers,
 		})
 
 		sinks = append(sinks, endpoint)
 	}
 
-	// NOTE(stevvooe): Moving to a new queuing implementation is as easy as
+	// NOTE(stevvooe): Moving to a new queueing implementation is as easy as
 	// replacing broadcaster with a rabbitmq implementation. It's recommended
 	// that the registry instances also act as the workers to keep deployment
 	// simple.
@@ -461,8 +394,6 @@ func (app *App) configureEvents(configuration *configuration.Configuration) {
 	}
 }
 
-type redisStartAtKey struct{}
-
 func (app *App) configureRedis(configuration *configuration.Configuration) {
 	if configuration.Redis.Addr == "" {
 		ctxu.GetLogger(app).Infof("redis not configured")
@@ -472,11 +403,11 @@ func (app *App) configureRedis(configuration *configuration.Configuration) {
 	pool := &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			// TODO(stevvooe): Yet another use case for contextual timing.
-			ctx := context.WithValue(app, redisStartAtKey{}, time.Now())
+			ctx := context.WithValue(app, "redis.connect.startedat", time.Now())
 
 			done := func(err error) {
 				logger := ctxu.GetLoggerWithField(ctx, "redis.connect.duration",
-					ctxu.Since(ctx, redisStartAtKey{}))
+					ctxu.Since(ctx, "redis.connect.startedat"))
 				if err != nil {
 					logger.Errorf("redis: error connecting: %v", err)
 				} else {
@@ -643,22 +574,10 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
 		}
 
 		// Add username to request logging
-		context.Context = ctxu.WithLogger(context.Context, ctxu.GetLogger(context.Context, auth.UserNameKey))
+		context.Context = ctxu.WithLogger(context.Context, ctxu.GetLogger(context.Context, "auth.user.name"))
 
 		if app.nameRequired(r) {
-			nameRef, err := reference.ParseNamed(getName(context))
-			if err != nil {
-				ctxu.GetLogger(context).Errorf("error parsing reference from context: %v", err)
-				context.Errors = append(context.Errors, distribution.ErrRepositoryNameInvalid{
-					Name:   getName(context),
-					Reason: err,
-				})
-				if err := errcode.ServeJSON(w, context.Errors); err != nil {
-					ctxu.GetLogger(context).Errorf("error serving error json: %v (from %v)", err, context.Errors)
-				}
-				return
-			}
-			repository, err := app.registry.Repository(context, nameRef)
+			repository, err := app.registry.Repository(context, getName(context))
 
 			if err != nil {
 				ctxu.GetLogger(context).Errorf("error resolving repository: %v", err)
@@ -668,8 +587,6 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
 					context.Errors = append(context.Errors, v2.ErrorCodeNameUnknown.WithDetail(err))
 				case distribution.ErrRepositoryNameInvalid:
 					context.Errors = append(context.Errors, v2.ErrorCodeNameInvalid.WithDetail(err))
-				case errcode.Error:
-					context.Errors = append(context.Errors, err)
 				}
 
 				if err := errcode.ServeJSON(w, context.Errors); err != nil {
@@ -683,7 +600,7 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
 				repository,
 				app.eventBridge(context, r))
 
-			context.Repository, err = applyRepoMiddleware(app, context.Repository, app.Config.Middleware["repository"])
+			context.Repository, err = applyRepoMiddleware(context.Context, context.Repository, app.Config.Middleware["repository"])
 			if err != nil {
 				ctxu.GetLogger(context).Errorf("error initializing repository middleware: %v", err)
 				context.Errors = append(context.Errors, errcode.ErrorCodeUnknown.WithDetail(err))
@@ -709,18 +626,6 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
 	})
 }
 
-type errCodeKey struct{}
-
-func (errCodeKey) String() string { return "err.code" }
-
-type errMessageKey struct{}
-
-func (errMessageKey) String() string { return "err.message" }
-
-type errDetailKey struct{}
-
-func (errDetailKey) String() string { return "err.detail" }
-
 func (app *App) logError(context context.Context, errors errcode.Errors) {
 	for _, e1 := range errors {
 		var c ctxu.Context
@@ -728,23 +633,23 @@ func (app *App) logError(context context.Context, errors errcode.Errors) {
 		switch e1.(type) {
 		case errcode.Error:
 			e, _ := e1.(errcode.Error)
-			c = ctxu.WithValue(context, errCodeKey{}, e.Code)
-			c = ctxu.WithValue(c, errMessageKey{}, e.Code.Message())
-			c = ctxu.WithValue(c, errDetailKey{}, e.Detail)
+			c = ctxu.WithValue(context, "err.code", e.Code)
+			c = ctxu.WithValue(c, "err.message", e.Code.Message())
+			c = ctxu.WithValue(c, "err.detail", e.Detail)
 		case errcode.ErrorCode:
 			e, _ := e1.(errcode.ErrorCode)
-			c = ctxu.WithValue(context, errCodeKey{}, e)
-			c = ctxu.WithValue(c, errMessageKey{}, e.Message())
+			c = ctxu.WithValue(context, "err.code", e)
+			c = ctxu.WithValue(c, "err.message", e.Message())
 		default:
 			// just normal go 'error'
-			c = ctxu.WithValue(context, errCodeKey{}, errcode.ErrorCodeUnknown)
-			c = ctxu.WithValue(c, errMessageKey{}, e1.Error())
+			c = ctxu.WithValue(context, "err.code", errcode.ErrorCodeUnknown)
+			c = ctxu.WithValue(c, "err.message", e1.Error())
 		}
 
 		c = ctxu.WithLogger(c, ctxu.GetLogger(c,
-			errCodeKey{},
-			errMessageKey{},
-			errDetailKey{}))
+			"err.code",
+			"err.message",
+			"err.detail"))
 		ctxu.GetResponseLogger(c).Errorf("response completed with error")
 	}
 }
@@ -769,9 +674,9 @@ func (app *App) context(w http.ResponseWriter, r *http.Request) *Context {
 		// A "host" item in the configuration takes precedence over
 		// X-Forwarded-Proto and X-Forwarded-Host headers, and the
 		// hostname in the request.
-		context.urlBuilder = v2.NewURLBuilder(&app.httpHost, false)
+		context.urlBuilder = v2.NewURLBuilder(&app.httpHost)
 	} else {
-		context.urlBuilder = v2.NewURLBuilderFromRequest(r, app.Config.HTTP.RelativeURLs)
+		context.urlBuilder = v2.NewURLBuilderFromRequest(r)
 	}
 
 	return context
@@ -792,11 +697,6 @@ func (app *App) authorized(w http.ResponseWriter, r *http.Request, context *Cont
 
 	if repo != "" {
 		accessRecords = appendAccessRecords(accessRecords, r.Method, repo)
-		if fromRepo := r.FormValue("from"); fromRepo != "" {
-			// mounting a blob from one repository to another requires pull (GET)
-			// access to the source repository.
-			accessRecords = appendAccessRecords(accessRecords, "GET", fromRepo)
-		}
 	} else {
 		// Only allow the name not to be set on the base route.
 		if app.nameRequired(r) {

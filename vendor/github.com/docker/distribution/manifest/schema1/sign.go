@@ -31,9 +31,8 @@ func Sign(m *Manifest, pk libtrust.PrivateKey) (*SignedManifest, error) {
 	}
 
 	return &SignedManifest{
-		Manifest:  *m,
-		all:       pretty,
-		Canonical: p,
+		Manifest: *m,
+		Raw:      pretty,
 	}, nil
 }
 
@@ -61,8 +60,7 @@ func SignWithChain(m *Manifest, key libtrust.PrivateKey, chain []*x509.Certifica
 	}
 
 	return &SignedManifest{
-		Manifest:  *m,
-		all:       pretty,
-		Canonical: p,
+		Manifest: *m,
+		Raw:      pretty,
 	}, nil
 }

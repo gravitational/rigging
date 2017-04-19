@@ -25,8 +25,7 @@ func (ec ErrorCode) ErrorCode() ErrorCode {
 
 // Error returns the ID/Value
 func (ec ErrorCode) Error() string {
-	// NOTE(stevvooe): Cannot use message here since it may have unpopulated args.
-	return strings.ToLower(strings.Replace(ec.String(), "_", " ", -1))
+	return ec.Descriptor().Value
 }
 
 // Descriptor returns the descriptor for the error code.
@@ -69,15 +68,6 @@ func (ec *ErrorCode) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// WithMessage creates a new Error struct based on the passed-in info and
-// overrides the Message property.
-func (ec ErrorCode) WithMessage(message string) Error {
-	return Error{
-		Code:    ec,
-		Message: message,
-	}
-}
-
 // WithDetail creates a new Error struct based on the passed-in info and
 // set the Detail property appropriately
 func (ec ErrorCode) WithDetail(detail interface{}) Error {
@@ -114,7 +104,9 @@ func (e Error) ErrorCode() ErrorCode {
 
 // Error returns a human readable representation of the error.
 func (e Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.Code.Error(), e.Message)
+	return fmt.Sprintf("%s: %s",
+		strings.ToLower(strings.Replace(e.Code.String(), "_", " ", -1)),
+		e.Message)
 }
 
 // WithDetail will return a new Error, based on the current one, but with
