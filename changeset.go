@@ -1003,7 +1003,10 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 // The new changeset is created with status in-progress.
 // If there's already a changeset with this name in this namespace, AlreadyExists
 // error is returned.
-func (cs *Changeset) Create(namespace, name string) (*ChangesetResource, error) {
+func (cs *Changeset) Create(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
+	if err := cs.Init(ctx); err != nil {
+		return nil, trace.Wrap(err)
+	}
 	res := &ChangesetResource{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       KindChangeset,
