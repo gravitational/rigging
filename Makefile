@@ -4,7 +4,7 @@ all: install
 
 # install installs binary
 .PHONY: install
-install: 
+install:
 	go install github.com/gravitational/rigging/tool/rig
 
 BUILDDIR ?= $(abspath build)
@@ -54,7 +54,7 @@ docker-image:
 	mkdir -p $(TEMPDIR)/build
 	BUILDDIR=$(TEMPDIR)/build $(MAKE) docker-build
 	cp -r docker/rig.dockerfile $(TEMPDIR)/Dockerfile
-	cd $(TEMPDIR) && docker build -t $(IMAGE) .
+	cd $(TEMPDIR) && docker build --pull -t $(IMAGE) .
 	rm -rf $(TEMPDIR)
 
 .PHONY: publish-docker-image
