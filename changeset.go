@@ -119,27 +119,30 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 	switch kind.Kind {
 	case KindJob:
 		_, err = cs.upsertJob(ctx, tr, data)
-		return err
 	case KindDaemonSet:
 		_, err = cs.upsertDaemonSet(ctx, tr, data)
-		return err
 	case KindReplicationController:
 		_, err = cs.upsertRC(ctx, tr, data)
-		return err
 	case KindDeployment:
 		_, err = cs.upsertDeployment(ctx, tr, data)
-		return err
 	case KindService:
 		_, err = cs.upsertService(ctx, tr, data)
-		return err
+	case KindServiceAccount:
+		_, err = cs.upsertServiceAccount(ctx, tr, data)
 	case KindConfigMap:
 		_, err = cs.upsertConfigMap(ctx, tr, data)
-		return err
 	case KindSecret:
 		_, err = cs.upsertSecret(ctx, tr, data)
-		return err
+	case KindRole, KindClusterRole:
+		_, err = cs.upsertRole(ctx, tr, data)
+	case KindRoleBinding, KindClusterRoleBinding:
+		_, err = cs.upsertRoleBinding(ctx, tr, data)
+	case KindPodSecurityPolicy:
+		_, err = cs.upsertSecurityPolicy(ctx, tr, data)
+	default:
+		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
-	return trace.BadParameter("unsupported resource type %v", kind.Kind)
+	return err
 }
 
 // Status checks all statuses for all resources updated or added in the context of a given changeset
@@ -227,6 +230,14 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteConfigMap(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindService:
 		return cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindServiceAccount:
+		return cs.deleteServiceAccount(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindRole, KindClusterRole:
+		return cs.deleteRole(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindRoleBinding, KindClusterRoleBinding:
+		return cs.deleteRoleBinding(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindPodSecurityPolicy:
+		return cs.deleteSecurityPolicy(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
@@ -302,10 +313,18 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusDeployment(ctx, data, uid)
 	case KindService:
 		return cs.statusService(ctx, data, uid)
+	case KindServiceAccount:
+		return cs.statusServiceAccount(ctx, data, uid)
 	case KindSecret:
 		return cs.statusSecret(ctx, data, uid)
 	case KindConfigMap:
 		return cs.statusConfigMap(ctx, data, uid)
+	case KindRole, KindClusterRole:
+		return cs.statusRole(ctx, data, uid)
+	case KindRoleBinding, KindClusterRoleBinding:
+		return cs.statusRoleBinding(ctx, data, uid)
+	case KindPodSecurityPolicy:
+		return cs.statusSecurityPolicy(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -592,10 +611,18 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertDeployment(ctx, item)
 	case KindService:
 		return cs.revertService(ctx, item)
+	case KindServiceAccount:
+		return cs.revertServiceAccount(ctx, item)
 	case KindSecret:
 		return cs.revertSecret(ctx, item)
 	case KindConfigMap:
 		return cs.revertConfigMap(ctx, item)
+	case KindRole, KindClusterRole:
+		return cs.revertRole(ctx, item)
+	case KindRoleBinding, KindClusterRoleBinding:
+		return cs.revertRoleBinding(ctx, item)
+	case KindPodSecurityPolicy:
+		return cs.revertSecurityPolicy(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -898,6 +925,126 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		return nil, trace.Wrap(err)
 	}
 	return cs.withUpsertOp(ctx, tr, currentService, service, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	serviceAccount, err := ParseService(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	log := log.WithFields(log.Fields{
+		"cs":              tr.String(),
+		"service_account": account,
+	})
+	log.Infof("upsert service account %v", account)
+	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
+	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Infof("existing service account not found")
+		currentServiceAccount = nil
+	}
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	role, err := ParseRole(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	roleS := fmt.Sprintf("%v/%v", role.Namespace, role.Name)
+	log := log.WithFields(log.Fields{
+		"cs":   tr.String(),
+		"role": roleS,
+	})
+	log.Debugf("upsert role %v", roleS)
+	roles := cs.Client.RbacV1alpha1().Roles(role.Namespace)
+	currentRole, err := roles.Get(serviceAccount.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing role not found")
+		currentRole = nil
+	}
+	control, err := NewRole(RoleConfig{Role: role, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentRole, service, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	serviceAccount, err := ParseService(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	log := log.WithFields(log.Fields{
+		"cs":              tr.String(),
+		"service_account": account,
+	})
+	log.Infof("upsert service account %v", account)
+	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
+	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Infof("existing service account not found")
+		currentServiceAccount = nil
+	}
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertSecurityPolicy(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	serviceAccount, err := ParseService(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	log := log.WithFields(log.Fields{
+		"cs":              tr.String(),
+		"service_account": account,
+	})
+	log.Infof("upsert service account %v", account)
+	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
+	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Infof("existing service account not found")
+		currentServiceAccount = nil
+	}
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
 		return control.Upsert(ctx)
 	})
 }
