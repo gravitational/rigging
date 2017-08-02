@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 	batchv1 "k8s.io/client-go/pkg/apis/batch/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/apis/rbac/v1alpha1"
 	"k8s.io/client-go/pkg/util/yaml"
 )
 
@@ -131,7 +132,7 @@ func ParseConfigMap(r io.Reader) (*v1.ConfigMap, error) {
 	return &cm, nil
 }
 
-// ParseSecret parses secret
+// ParseSecret parses a secret from the specified stream
 func ParseSecret(r io.Reader) (*v1.Secret, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
@@ -142,4 +143,64 @@ func ParseSecret(r io.Reader) (*v1.Secret, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &secret, nil
+}
+
+// ParseServiceAccount parses a service account from the specified stream
+func ParseServiceAccount(r io.Reader) (*v1.ServiceAccount, error) {
+	var account v1.ServiceAccount
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&account)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &account, nil
+}
+
+// ParseRole parses an rbac role from the specified stream
+func ParseRole(r io.Reader) (*v1alpha1.Role, error) {
+	var role v1alpha1.Role
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&role)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &role, nil
+}
+
+// ParseClusterRole parses an rbac cluster role from the specified stream
+func ParseClusterRole(r io.Reader) (*v1alpha1.ClusterRole, error) {
+	var role v1alpha1.ClusterRole
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&role)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &role, nil
+}
+
+// ParseRoleBinding parses an rbac role binding from the specified stream
+func ParseRoleBinding(r io.Reader) (*v1alpha1.RoleBinding, error) {
+	var binding v1alpha1.RoleBinding
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&binding)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &binding, nil
+}
+
+// ParseClusterRoleBinding parses an rbac cluster role binding from the specified stream
+func ParseClusterRoleBinding(r io.Reader) (*v1alpha1.ClusterRoleBinding, error) {
+	var binding v1alpha1.ClusterRoleBinding
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&binding)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &binding, nil
+}
+
+// ParsePodSecurityPolicy parses a pod security policy from the specified stream
+func ParsePodSecurityPolicy(r io.Reader) (*v1beta1.PodSecurityPolicy, error) {
+	var policy v1beta1.PodSecurityPolicy
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&policy)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &policy, nil
 }

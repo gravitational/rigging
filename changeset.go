@@ -133,12 +133,16 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertConfigMap(ctx, tr, data)
 	case KindSecret:
 		_, err = cs.upsertSecret(ctx, tr, data)
-	case KindRole, KindClusterRole:
+	case KindRole:
 		_, err = cs.upsertRole(ctx, tr, data)
-	case KindRoleBinding, KindClusterRoleBinding:
+	case KindClusterRole:
+		_, err = cs.upsertClusterRole(ctx, tr, data)
+	case KindRoleBinding:
 		_, err = cs.upsertRoleBinding(ctx, tr, data)
+	case KindClusterRoleBinding:
+		_, err = cs.upsertClusterRoleBinding(ctx, tr, data)
 	case KindPodSecurityPolicy:
-		_, err = cs.upsertSecurityPolicy(ctx, tr, data)
+		_, err = cs.upsertPodSecurityPolicy(ctx, tr, data)
 	default:
 		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
@@ -232,12 +236,16 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteService(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindServiceAccount:
 		return cs.deleteServiceAccount(ctx, tr, resourceNamespace, resource.Name, cascade)
-	case KindRole, KindClusterRole:
+	case KindRole:
 		return cs.deleteRole(ctx, tr, resourceNamespace, resource.Name, cascade)
-	case KindRoleBinding, KindClusterRoleBinding:
+	case KindClusterRole:
+		return cs.deleteClusterRole(ctx, tr, resource.Name, cascade)
+	case KindRoleBinding:
 		return cs.deleteRoleBinding(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindClusterRoleBinding:
+		return cs.deleteClusterRoleBinding(ctx, tr, resource.Name, cascade)
 	case KindPodSecurityPolicy:
-		return cs.deleteSecurityPolicy(ctx, tr, resourceNamespace, resource.Name, cascade)
+		return cs.deletePodSecurityPolicy(ctx, tr, resource.Name, cascade)
 	}
 	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
@@ -319,12 +327,16 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusSecret(ctx, data, uid)
 	case KindConfigMap:
 		return cs.statusConfigMap(ctx, data, uid)
-	case KindRole, KindClusterRole:
+	case KindRole:
 		return cs.statusRole(ctx, data, uid)
-	case KindRoleBinding, KindClusterRoleBinding:
+	case KindClusterRole:
+		return cs.statusClusterRole(ctx, data, uid)
+	case KindRoleBinding:
 		return cs.statusRoleBinding(ctx, data, uid)
+	case KindClusterRoleBinding:
+		return cs.statusClusterRoleBinding(ctx, data, uid)
 	case KindPodSecurityPolicy:
-		return cs.statusSecurityPolicy(ctx, data, uid)
+		return cs.statusPodSecurityPolicy(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -476,6 +488,132 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 	return control.Status()
 }
 
+func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid string) error {
+	account, err := ParseServiceAccount(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.ServiceAccounts(account.Namespace).Get(account.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("service account with UID %v not found", uid)
+		}
+	}
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusRole(ctx context.Context, data []byte, uid string) error {
+	role, err := ParseRole(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.RbacV1alpha1().Roles(role.Namespace).Get(role.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("role with UID %v not found", uid)
+		}
+	}
+	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusClusterRole(ctx context.Context, data []byte, uid string) error {
+	role, err := ParseClusterRole(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(role.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("cluster role with UID %v not found", uid)
+		}
+	}
+	control, err := NewClusterRoleControl(ClusterRoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusRoleBinding(ctx context.Context, data []byte, uid string) error {
+	binding, err := ParseRoleBinding(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace).Get(binding.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("role binding with UID %v not found", uid)
+		}
+	}
+	control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusClusterRoleBinding(ctx context.Context, data []byte, uid string) error {
+	binding, err := ParseClusterRoleBinding(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(binding.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("cluster role binding with UID %v not found", uid)
+		}
+	}
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, uid string) error {
+	policy, err := ParsePodSecurityPolicy(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(policy.Name)
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("pod security policy with UID %v not found", uid)
+		}
+	}
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
 func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj meta.Object, fn func() error) error {
 	data, err := goyaml.Marshal(obj)
 	if err != nil {
@@ -598,6 +736,90 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 	})
 }
 
+func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	account, err := cs.Client.Core().ServiceAccounts(Namespace(namespace)).Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, account, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	role, err := cs.Client.RbacV1alpha1().Roles(Namespace(namespace)).Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, role, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	role, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewClusterRoleControl(ClusterRoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, role, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	binding, err := cs.Client.RbacV1alpha1().RoleBindings(Namespace(namespace)).Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, binding, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	binding, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, binding, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	policy, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(name)
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, policy, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *OperationInfo) error {
 	kind := info.Kind()
 	switch info.Kind() {
@@ -617,12 +839,16 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertSecret(ctx, item)
 	case KindConfigMap:
 		return cs.revertConfigMap(ctx, item)
-	case KindRole, KindClusterRole:
+	case KindRole:
 		return cs.revertRole(ctx, item)
-	case KindRoleBinding, KindClusterRoleBinding:
+	case KindClusterRole:
+		return cs.revertClusterRole(ctx, item)
+	case KindRoleBinding:
 		return cs.revertRoleBinding(ctx, item)
+	case KindClusterRoleBinding:
+		return cs.revertClusterRoleBinding(ctx, item)
 	case KindPodSecurityPolicy:
-		return cs.revertSecurityPolicy(ctx, item)
+		return cs.revertPodSecurityPolicy(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -746,6 +972,168 @@ func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) erro
 	}
 	// this operation either created or updated Secret, so we create a new version
 	control, err := NewSecretControl(SecretConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertServiceAccount(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		account, err := ParseServiceAccount(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	account, err := ParseServiceAccount(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertRole(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		role, err := ParseRole(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	role, err := ParseRole(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertClusterRole(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		role, err := ParseClusterRole(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewClusterRoleControl(ClusterRoleConfig{Role: *role, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	role, err := ParseClusterRole(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewClusterRoleControl(ClusterRoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertRoleBinding(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		binding, err := ParseRoleBinding(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	binding, err := ParseRoleBinding(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertClusterRoleBinding(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		binding, err := ParseClusterRoleBinding(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	binding, err := ParseClusterRoleBinding(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertPodSecurityPolicy(ctx context.Context, item *ChangesetItem) error {
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		policy, err := ParsePodSecurityPolicy(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return control.Delete(ctx, true)
+	}
+
+	// this operation either created or updated the resource, so we create a new version
+	policy, err := ParsePodSecurityPolicy(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -930,31 +1318,31 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 }
 
 func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
-	serviceAccount, err := ParseService(bytes.NewReader(data))
+	account, err := ParseServiceAccount(bytes.NewReader(data))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	accountS := fmt.Sprintf("%v/%v", account.Namespace, account.Name)
 	log := log.WithFields(log.Fields{
 		"cs":              tr.String(),
-		"service_account": account,
+		"service_account": accountS,
 	})
-	log.Infof("upsert service account %v", account)
-	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
-	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	log.Debugf("upsert service account %v", accountS)
+	accounts := cs.Client.Core().ServiceAccounts(account.Namespace)
+	currentAccount, err := accounts.Get(account.Name)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
 		log.Infof("existing service account not found")
-		currentServiceAccount = nil
+		currentAccount = nil
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
+	return cs.withUpsertOp(ctx, tr, currentAccount, account, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -971,7 +1359,7 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 	})
 	log.Debugf("upsert role %v", roleS)
 	roles := cs.Client.RbacV1alpha1().Roles(role.Namespace)
-	currentRole, err := roles.Get(serviceAccount.Name)
+	currentRole, err := roles.Get(role.Name)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -980,71 +1368,131 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 		log.Debug("existing role not found")
 		currentRole = nil
 	}
-	control, err := NewRole(RoleConfig{Role: role, Client: cs.Client})
+	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentRole, service, func() error {
+	return cs.withUpsertOp(ctx, tr, currentRole, role, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	role, err := ParseClusterRole(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	roleS := fmt.Sprintf("%v/%v", role.Namespace, role.Name)
+	log := log.WithFields(log.Fields{
+		"cs":           tr.String(),
+		"cluster_role": roleS,
+	})
+	log.Debugf("upsert cluster role %v", roleS)
+	roles := cs.Client.RbacV1alpha1().ClusterRoles()
+	currentRole, err := roles.Get(role.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing cluster role not found")
+		currentRole = nil
+	}
+	control, err := NewClusterRoleControl(ClusterRoleConfig{Role: *role, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentRole, role, func() error {
 		return control.Upsert(ctx)
 	})
 }
 
 func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
-	serviceAccount, err := ParseService(bytes.NewReader(data))
+	binding, err := ParseRoleBinding(bytes.NewReader(data))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	bindingS := fmt.Sprintf("%v/%v", binding.Namespace, binding.Name)
 	log := log.WithFields(log.Fields{
-		"cs":              tr.String(),
-		"service_account": account,
+		"cs":           tr.String(),
+		"role_binding": bindingS,
 	})
-	log.Infof("upsert service account %v", account)
-	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
-	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	log.Debugf("upsert role binding %v", bindingS)
+	bindings := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace)
+	currentBinding, err := bindings.Get(binding.Name)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing service account not found")
-		currentServiceAccount = nil
+		log.Infof("existing role binding not found")
+		currentBinding = nil
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
+	return cs.withUpsertOp(ctx, tr, currentBinding, binding, func() error {
 		return control.Upsert(ctx)
 	})
 }
 
-func (cs *Changeset) upsertSecurityPolicy(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
-	serviceAccount, err := ParseService(bytes.NewReader(data))
+func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	binding, err := ParseClusterRoleBinding(bytes.NewReader(data))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	account := fmt.Sprintf("%v/%v", serviceAccount.Namespace, serviceAccount.Name)
+	bindingS := fmt.Sprintf("%v/%v", binding.Namespace, binding.Name)
 	log := log.WithFields(log.Fields{
-		"cs":              tr.String(),
-		"service_account": account,
+		"cs": tr.String(),
+		"cluster_role_binding": bindingS,
 	})
-	log.Infof("upsert service account %v", account)
-	serviceAccounts := cs.Client.Core().ServiceAccounts(serviceAccount.Namespace)
-	currentServiceAccount, err := serviceAccounts.Get(serviceAccount.Name)
+	log.Debugf("upsert cluster role binding %v", bindingS)
+	bindings := cs.Client.RbacV1alpha1().ClusterRoleBindings()
+	currentBinding, err := bindings.Get(binding.Name)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing service account not found")
-		currentServiceAccount = nil
+		log.Infof("existing cluster role binding not found")
+		currentBinding = nil
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{Service: service, Client: cs.Client})
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return cs.withUpsertOp(ctx, tr, currentServiceAccount, service, func() error {
+	return cs.withUpsertOp(ctx, tr, currentBinding, binding, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	policy, err := ParsePodSecurityPolicy(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	policyS := fmt.Sprintf("%v/%v", policy.Namespace, policy.Name)
+	log := log.WithFields(log.Fields{
+		"cs": tr.String(),
+		"pod_security_policy": policyS,
+	})
+	log.Debugf("upsert pod security policy %v", policyS)
+	policies := cs.Client.ExtensionsV1beta1().PodSecurityPolicies()
+	currentPolicy, err := policies.Get(policy.Name)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Infof("existing pod security policy not found")
+		currentPolicy = nil
+	}
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return cs.withUpsertOp(ctx, tr, currentPolicy, policy, func() error {
 		return control.Upsert(ctx)
 	})
 }
