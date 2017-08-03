@@ -11,7 +11,6 @@ const (
 	ChangesetResourceName     = "changeset.changeset.gravitational.io"
 	ChangesetGroup            = "changeset.gravitational.io"
 	ChangesetVersion          = "v1"
-	ChangesetAPIVersion       = "changeset.gravitational.io/v1"
 	ChangesetCollection       = "changesets"
 	DefaultNamespace          = "default"
 	KindDaemonSet             = "DaemonSet"
@@ -21,9 +20,14 @@ const (
 	KindReplicaSet            = "ReplicaSet"
 	KindReplicationController = "ReplicationController"
 	KindService               = "Service"
+	KindServiceAccount        = "ServiceAccount"
 	KindSecret                = "Secret"
 	KindJob                   = "Job"
-	BatchAPIVersion           = "batch/v1"
+	KindRole                  = "Role"
+	KindClusterRole           = "ClusterRole"
+	KindRoleBinding           = "RoleBinding"
+	KindClusterRoleBinding    = "ClusterRoleBinding"
+	KindPodSecurityPolicy     = "PodSecurityPolicy"
 	ControllerUIDLabel        = "controller-uid"
 	AnnotationCreatedBy       = "kubernetes.io/created-by"
 	OpStatusCreated           = "created"
@@ -37,7 +41,12 @@ const (
 	// RetryPeriod is a period between Retries
 	DefaultRetryPeriod = time.Second
 	DefaultBufferSize  = 1024
-	V1                 = "v1"
+
+	ChangesetAPIVersion  = "changeset.gravitational.io/v1"
+	BatchAPIVersion      = "batch/v1"
+	RBACAPIVersion       = "rbac.authorization.k8s.io/v1alpha1"
+	ExtensionsAPIVersion = "extensions/v1beta1"
+	V1                   = "v1"
 )
 
 // NamespaceOrDefault returns a default namespace if the specified namespace is empty
@@ -50,5 +59,8 @@ func Namespace(namespace string) string {
 
 // formatMeta formats this meta as text
 func formatMeta(meta v1.ObjectMeta) string {
+	if meta.Namespace == "" {
+		return meta.Name
+	}
 	return fmt.Sprintf("%v/%v", Namespace(meta.Namespace), meta.Name)
 }

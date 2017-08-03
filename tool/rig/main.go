@@ -171,7 +171,7 @@ func revert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -190,7 +190,7 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -209,7 +209,7 @@ func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *r
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -236,7 +236,7 @@ func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -263,7 +263,7 @@ func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -282,7 +282,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	retryAttempts int, retryPeriod time.Duration) error {
 	switch resource.Kind {
 	case rigging.KindChangeset:
-		cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+		cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 			Client: client,
 			Config: config,
 		})
@@ -335,7 +335,7 @@ const (
 )
 
 func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, ref rigging.Ref, output string) error {
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
@@ -404,7 +404,7 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 }
 
 func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, tr rigging.Ref, force bool) error {
-	cs, err := rigging.NewChangeset(rigging.ChangesetConfig{
+	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})

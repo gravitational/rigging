@@ -133,8 +133,8 @@ func retry(ctx context.Context, times int, period time.Duration, fn func() error
 		return nil
 	}
 	err := fn()
-	for i := 1; i < times; i += 1 {
-		log.Infof("attempt %v, result: %v, retry in %v", i+1, err, period)
+	for i := 1; i < times && err != nil; i += 1 {
+		log.Infof("attempt %v, result: %v, retry in %v", i+1, trace.DebugReport(err), period)
 		select {
 		case <-ctx.Done():
 			log.Infof("context is closing, return")
@@ -142,9 +142,6 @@ func retry(ctx context.Context, times int, period time.Duration, fn func() error
 		case <-time.After(period):
 		}
 		err = fn()
-		if err == nil {
-			return nil
-		}
 	}
 	return err
 }
@@ -240,23 +237,45 @@ func getPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (i
 }
 
 func ConvertError(err error) error {
+	return ConvertErrorWithContext(err, "")
+}
+
+func ConvertErrorWithContext(err error, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}
-	se, ok := err.(*errors.StatusError)
+	statusErr, ok := err.(*errors.StatusError)
 	if !ok {
 		return err
 	}
 
-	format, args := se.DebugError()
-	status := se.Status()
+	message := fmt.Sprintf("%v", err)
+	if !isEmptyDetails(statusErr.ErrStatus.Details) {
+		message = fmt.Sprintf("%v, details: %v", message, statusErr.ErrStatus.Details)
+	}
+	if format != "" {
+		message = fmt.Sprintf("%v: %v", fmt.Sprintf(format, args...), message)
+	}
+
+	status := statusErr.Status()
 	switch {
 	case status.Code == http.StatusConflict && status.Reason == unversioned.StatusReasonAlreadyExists:
-		return trace.AlreadyExists("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+		return trace.AlreadyExists(message)
 	case status.Code == http.StatusNotFound:
-		return trace.NotFound("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+		return trace.NotFound(message)
 	case status.Code == http.StatusForbidden:
-		return trace.AccessDenied("error: %v, details: %v", err.Error(), fmt.Sprintf(format, args...))
+		return trace.AccessDenied(message)
 	}
 	return err
+}
+
+func isEmptyDetails(details *unversioned.StatusDetails) bool {
+	if details == nil {
+		return true
+	}
+
+	if details.Name == "" && details.Group == "" && details.Kind == "" && len(details.Causes) == 0 {
+		return true
+	}
+	return false
 }
