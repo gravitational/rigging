@@ -84,7 +84,7 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = policies.Create(&c.Policy)
-		return ConvertError(err)
+		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
 	}
 	_, err = policies.Update(&c.Policy)
 	return ConvertError(err)

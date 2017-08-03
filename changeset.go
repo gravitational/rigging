@@ -1325,12 +1325,10 @@ func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetReso
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	accountS := fmt.Sprintf("%v/%v", account.Namespace, account.Name)
 	log := log.WithFields(log.Fields{
 		"cs":              tr.String(),
-		"service_account": accountS,
+		"service_account": formatMeta(account.ObjectMeta),
 	})
-	log.Debugf("upsert service account %v", accountS)
 	accounts := cs.Client.Core().ServiceAccounts(account.Namespace)
 	currentAccount, err := accounts.Get(account.Name)
 	err = ConvertError(err)
@@ -1355,12 +1353,10 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	roleS := fmt.Sprintf("%v/%v", role.Namespace, role.Name)
 	log := log.WithFields(log.Fields{
 		"cs":   tr.String(),
-		"role": roleS,
+		"role": formatMeta(role.ObjectMeta),
 	})
-	log.Debugf("upsert role %v", roleS)
 	roles := cs.Client.RbacV1alpha1().Roles(role.Namespace)
 	currentRole, err := roles.Get(role.Name)
 	err = ConvertError(err)
@@ -1385,12 +1381,10 @@ func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResourc
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	roleS := fmt.Sprintf("%v/%v", role.Namespace, role.Name)
 	log := log.WithFields(log.Fields{
 		"cs":           tr.String(),
-		"cluster_role": roleS,
+		"cluster_role": formatMeta(role.ObjectMeta),
 	})
-	log.Debugf("upsert cluster role %v", roleS)
 	roles := cs.Client.RbacV1alpha1().ClusterRoles()
 	currentRole, err := roles.Get(role.Name)
 	err = ConvertError(err)
@@ -1415,12 +1409,10 @@ func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResourc
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	bindingS := fmt.Sprintf("%v/%v", binding.Namespace, binding.Name)
 	log := log.WithFields(log.Fields{
 		"cs":           tr.String(),
-		"role_binding": bindingS,
+		"role_binding": formatMeta(binding.ObjectMeta),
 	})
-	log.Debugf("upsert role binding %v", bindingS)
 	bindings := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace)
 	currentBinding, err := bindings.Get(binding.Name)
 	err = ConvertError(err)
@@ -1445,12 +1437,10 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	bindingS := fmt.Sprintf("%v/%v", binding.Namespace, binding.Name)
 	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
-		"cluster_role_binding": bindingS,
+		"cluster_role_binding": formatMeta(binding.ObjectMeta),
 	})
-	log.Debugf("upsert cluster role binding %v", bindingS)
 	bindings := cs.Client.RbacV1alpha1().ClusterRoleBindings()
 	currentBinding, err := bindings.Get(binding.Name)
 	err = ConvertError(err)
@@ -1475,12 +1465,10 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	policyS := fmt.Sprintf("%v/%v", policy.Namespace, policy.Name)
 	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
-		"pod_security_policy": policyS,
+		"pod_security_policy": formatMeta(policy.ObjectMeta),
 	})
-	log.Debugf("upsert pod security policy %v", policyS)
 	policies := cs.Client.ExtensionsV1beta1().PodSecurityPolicies()
 	currentPolicy, err := policies.Get(policy.Name)
 	err = ConvertError(err)

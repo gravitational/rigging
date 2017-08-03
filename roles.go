@@ -84,7 +84,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = roles.Create(&c.Role)
-		return ConvertError(err)
+		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta))
 	}
 	_, err = roles.Update(&c.Role)
 	return ConvertError(err)
@@ -157,7 +157,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = roles.Create(&c.Role)
-		return ConvertError(err)
+		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta))
 	}
 	_, err = roles.Update(&c.Role)
 	return ConvertError(err)
@@ -230,7 +230,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = bindings.Create(&c.RoleBinding)
-		return ConvertError(err)
+		return ConvertErrorWithContext(err, "cannot create role binding %q", formatMeta(c.ObjectMeta))
 	}
 	_, err = bindings.Update(&c.RoleBinding)
 	return ConvertError(err)
@@ -303,7 +303,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = bindings.Create(&c.ClusterRoleBinding)
-		return ConvertError(err)
+		return ConvertErrorWithContext(err, "cannot create cluster role binding %q", formatMeta(c.ObjectMeta))
 	}
 	_, err = bindings.Update(&c.ClusterRoleBinding)
 	return ConvertError(err)
