@@ -1218,7 +1218,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing daemonset not found")
+		log.Debug("existing daemonset not found")
 		currentDS = nil
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: ds, Client: cs.Client})
@@ -1247,7 +1247,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing replication controller not found")
+		log.Debug("existing replication controller not found")
 		currentRC = nil
 	}
 	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
@@ -1305,7 +1305,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing service not found")
+		log.Debug("existing service not found")
 		currentService = nil
 	}
 	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
@@ -1335,7 +1335,7 @@ func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetReso
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing service account not found")
+		log.Debug("existing service account not found")
 		currentAccount = nil
 	}
 	control, err := NewServiceAccountControl(ServiceAccountConfig{Account: *account, Client: cs.Client})
@@ -1425,7 +1425,7 @@ func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResourc
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing role binding not found")
+		log.Debug("existing role binding not found")
 		currentBinding = nil
 	}
 	control, err := NewRoleBindingControl(RoleBindingConfig{Binding: *binding, Client: cs.Client})
@@ -1455,7 +1455,7 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing cluster role binding not found")
+		log.Debug("existing cluster role binding not found")
 		currentBinding = nil
 	}
 	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{Binding: *binding, Client: cs.Client})
@@ -1485,7 +1485,7 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing pod security policy not found")
+		log.Debug("existing pod security policy not found")
 		currentPolicy = nil
 	}
 	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{Policy: *policy, Client: cs.Client})
@@ -1514,7 +1514,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing configmap not found")
+		log.Debug("existing configmap not found")
 		currentConfigMap = nil
 	}
 	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
@@ -1543,7 +1543,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Infof("existing secret not found")
+		log.Debug("existing secret not found")
 		currentSecret = nil
 	}
 	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
