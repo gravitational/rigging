@@ -56,7 +56,7 @@ func (c *ChangesetConfig) CheckAndSetDefaults() error {
 	return nil
 }
 
-func NewChangeset(config ChangesetConfig) (*Changeset, error) {
+func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, error) {
 	if err := config.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -73,7 +73,13 @@ func NewChangeset(config ChangesetConfig) (*Changeset, error) {
 	if err != nil {
 		return nil, ConvertError(err)
 	}
-	return &Changeset{ChangesetConfig: config, client: clt}, nil
+
+	cs := &Changeset{ChangesetConfig: config, client: clt}
+	if err := cs.Init(ctx); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return cs, nil
 }
 
 // Changeset is a is a collection changeset log that can revert a series of
@@ -205,9 +211,6 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 
 // DeleteResource deletes a resources in the context of a given changeset
 func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, changesetName string, resourceNamespace string, resource Ref, cascade bool) error {
-	if err := cs.Init(ctx); err != nil {
-		return trace.Wrap(err)
-	}
 	tr, err := cs.createOrRead(changesetNamespace, changesetName, ChangesetSpec{Status: ChangesetStatusInProgress})
 	if err != nil {
 		return trace.Wrap(err)
@@ -1556,7 +1559,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 }
 
 func (cs *Changeset) Init(ctx context.Context) error {
-	log.Info("changeset init")
+	log.Debug("changeset init")
 	tpr := &v1beta1.ThirdPartyResource{
 		ObjectMeta: v1.ObjectMeta{
 			Name: ChangesetResourceName,
@@ -1581,16 +1584,10 @@ func (cs *Changeset) Init(ctx context.Context) error {
 }
 
 func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
-	if err := cs.Init(ctx); err != nil {
-		return nil, trace.Wrap(err)
-	}
 	return cs.get(namespace, name)
 }
 
 func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList, error) {
-	if err := cs.Init(ctx); err != nil {
-		return nil, trace.Wrap(err)
-	}
 	return cs.list(namespace)
 }
 
@@ -1599,9 +1596,6 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 // If there's already a changeset with this name in this namespace, AlreadyExists
 // error is returned.
 func (cs *Changeset) Create(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
-	if err := cs.Init(ctx); err != nil {
-		return nil, trace.Wrap(err)
-	}
 	res := &ChangesetResource{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       KindChangeset,
@@ -1690,9 +1684,6 @@ func (cs *Changeset) createOrRead(namespace, name string, spec ChangesetSpec) (*
 }
 
 func (cs *Changeset) Delete(ctx context.Context, namespace, name string) error {
-	if err := cs.Init(ctx); err != nil {
-		return trace.Wrap(err)
-	}
 	var raw runtime.Unknown
 	err := cs.client.Delete().
 		SubResource("namespaces", namespace, ChangesetCollection, name).
