@@ -81,6 +81,7 @@ func FromStdIn(act action, data string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// PollStatus polls status periodically
 func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duration, reporter StatusReporter) error {
 	if retryAttempts == 0 {
 		retryAttempts = DefaultRetryAttempts
@@ -93,7 +94,8 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 	return retry(ctx, retryAttempts, retryPeriod, reporter.Status)
 }
 
-func collectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
+// CollectPods collects pods created by some object matcher passed as fn
+func CollectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	for key, val := range matchLabels {

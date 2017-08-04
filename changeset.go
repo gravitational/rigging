@@ -379,7 +379,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte, uid string) err
 			return trace.NotFound("job with UID %v not found", uid)
 		}
 	}
-	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -660,7 +660,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -883,7 +883,7 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1195,7 +1195,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		currentJob = nil
 	}
 
-	control, err := NewJobControl(JobConfig{job: job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
