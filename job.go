@@ -35,28 +35,28 @@ func NewJobControl(config JobConfig) (*JobControl, error) {
 	return &JobControl{
 		JobConfig: config,
 		Entry: log.WithFields(log.Fields{
-			"job": formatMeta(config.job.ObjectMeta),
+			"job": formatMeta(config.Job.ObjectMeta),
 		}),
 	}, nil
 }
 
 func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.job.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.Job.ObjectMeta))
 
-	jobs := c.Batch().Jobs(c.job.Namespace)
-	currentJob, err := jobs.Get(c.job.Name)
+	jobs := c.Batch().Jobs(c.Job.Namespace)
+	currentJob, err := jobs.Get(c.Job.Name)
 	if err != nil {
 		return ConvertError(err)
 	}
 
-	pods := c.Core().Pods(c.job.Namespace)
+	pods := c.Core().Pods(c.Job.Namespace)
 	currentPods, err := c.collectPods(currentJob)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	c.Info("deleting current job")
-	err = jobs.Delete(c.job.Name, nil)
+	err = jobs.Delete(c.Job.Name, nil)
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -76,10 +76,10 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *JobControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.job.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.Job.ObjectMeta))
 
-	jobs := c.Batch().Jobs(c.job.Namespace)
-	currentJob, err := jobs.Get(c.job.Name)
+	jobs := c.Batch().Jobs(c.Job.Namespace)
+	currentJob, err := jobs.Get(c.Job.Name)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -89,7 +89,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		currentJob = nil
 	}
 
-	pods := c.Core().Pods(c.job.Namespace)
+	pods := c.Core().Pods(c.Job.Namespace)
 	var currentPods map[string]v1.Pod
 	if currentJob != nil {
 		c.Infof("currentJob: %v", currentJob.UID)
@@ -99,22 +99,22 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		}
 
 		c.Info("deleting current job")
-		err = jobs.Delete(c.job.Name, nil)
+		err = jobs.Delete(c.Job.Name, nil)
 		if err != nil {
 			return ConvertError(err)
 		}
 	}
 
 	c.Info("creating new job")
-	c.job.UID = ""
-	c.job.SelfLink = ""
-	c.job.ResourceVersion = ""
-	if c.job.Spec.Selector != nil {
+	c.Job.UID = ""
+	c.Job.SelfLink = ""
+	c.Job.ResourceVersion = ""
+	if c.Job.Spec.Selector != nil {
 		// Remove auto-generated labels
-		delete(c.job.Spec.Selector.MatchLabels, ControllerUIDLabel)
-		delete(c.job.Spec.Template.Labels, ControllerUIDLabel)
+		delete(c.Job.Spec.Selector.MatchLabels, ControllerUIDLabel)
+		delete(c.Job.Spec.Template.Labels, ControllerUIDLabel)
 	}
-	_, err = jobs.Create(c.job)
+	_, err = jobs.Create(c.Job)
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -133,8 +133,8 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 }
 
 func (c *JobControl) Status() error {
-	jobs := c.Batch().Jobs(c.job.Namespace)
-	job, err := jobs.Get(c.job.Name)
+	jobs := c.Batch().Jobs(c.Job.Namespace)
+	job, err := jobs.Get(c.Job.Name)
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -167,7 +167,7 @@ func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	if job.Spec.Selector != nil {
 		labels = job.Spec.Selector.MatchLabels
 	}
-	pods, err := collectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
+	pods, err := CollectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref api.ObjectReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
 	return pods, ConvertError(err)
@@ -179,7 +179,7 @@ type JobControl struct {
 }
 
 type JobConfig struct {
-	job *batchv1.Job
+	Job *batchv1.Job
 	*kubernetes.Clientset
 }
 
@@ -187,9 +187,9 @@ func (c *JobConfig) checkAndSetDefaults() error {
 	if c.Clientset == nil {
 		return trace.BadParameter("missing parameter Clientset")
 	}
-	c.job.Kind = KindJob
-	if c.job.APIVersion == "" {
-		c.job.APIVersion = BatchAPIVersion
+	c.Job.Kind = KindJob
+	if c.Job.APIVersion == "" {
+		c.Job.APIVersion = BatchAPIVersion
 	}
 	return nil
 }
