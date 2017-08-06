@@ -7,23 +7,10 @@ import:
 - package: github.com/gravitational/trace
 - package: gopkg.in/alecthomas/kingpin.v2
 - package: k8s.io/client-go
-  version: v2.0.0
-  subpackages:
-  - kubernetes
-  - pkg/api
-  - pkg/api/errors
-  - pkg/api/unversioned
-  - pkg/api/v1
-  - pkg/apis/extensions/v1beta1
-  - pkg/labels
-  - pkg/runtime
-  - pkg/runtime/serializer
-  - pkg/util/yaml
-  - rest
-  - tools/clientcmd
+  version: release-4.0
 - package: golang.org/x/net
-  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
 - package: github.com/docker/distribution
-  version: 0a3acb2625f553a71392ed9dc6ba1dde2cf3e3a8
+  version: cd27f179f2c10c5d300e6d09025b538c475b0d51
 testImport:
 - package: gopkg.in/check.v1

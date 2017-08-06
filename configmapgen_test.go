@@ -8,7 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/kylelemons/godebug/diff"
 	. "gopkg.in/check.v1"
-	"k8s.io/client-go/pkg/api/unversioned"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -30,7 +30,7 @@ func (s *ConfigmapGenSuite) TestConfigMap(c *C) {
 			namespace: "kube-system",
 			literals:  []string{"a=b", "key=val"},
 			result: &v1.ConfigMap{
-				TypeMeta:   unversioned.TypeMeta{Kind: KindConfigMap, APIVersion: V1},
+				TypeMeta:   metav1.TypeMeta{Kind: KindConfigMap, APIVersion: V1},
 				ObjectMeta: v1.ObjectMeta{Name: "cm1", Namespace: "kube-system"},
 				Data: map[string]string{
 					"a":   "b",
@@ -43,7 +43,7 @@ func (s *ConfigmapGenSuite) TestConfigMap(c *C) {
 			namespace: "kube-system",
 			files:     files(c, []file{{name: "file1", value: "val1"}, {name: "text.yaml", value: "a: b"}}),
 			result: &v1.ConfigMap{
-				TypeMeta:   unversioned.TypeMeta{Kind: KindConfigMap, APIVersion: V1},
+				TypeMeta:   metav1.TypeMeta{Kind: KindConfigMap, APIVersion: V1},
 				ObjectMeta: v1.ObjectMeta{Name: "cm1", Namespace: "kube-system"},
 				Data: map[string]string{
 					"file1":     "val1",
