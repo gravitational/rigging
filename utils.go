@@ -13,12 +13,12 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/errors"
-	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 type action string
@@ -102,7 +102,7 @@ func CollectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 		set[key] = val
 	}
 
-	podList, err := client.Core().Pods(namespace).List(v1.ListOptions{
+	podList, err := client.Core().Pods(namespace).List(metav1.ListOptions{
 		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
@@ -261,7 +261,7 @@ func ConvertErrorWithContext(err error, format string, args ...interface{}) erro
 
 	status := statusErr.Status()
 	switch {
-	case status.Code == http.StatusConflict && status.Reason == unversioned.StatusReasonAlreadyExists:
+	case status.Code == http.StatusConflict && status.Reason == metav1.StatusReasonAlreadyExists:
 		return trace.AlreadyExists(message)
 	case status.Code == http.StatusNotFound:
 		return trace.NotFound(message)
@@ -271,7 +271,7 @@ func ConvertErrorWithContext(err error, format string, args ...interface{}) erro
 	return err
 }
 
-func isEmptyDetails(details *unversioned.StatusDetails) bool {
+func isEmptyDetails(details *metav1.StatusDetails) bool {
 	if details == nil {
 		return true
 	}

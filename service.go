@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 )
@@ -88,7 +89,7 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.service.ObjectMeta))
 
 	services := c.Client.Core().Services(c.service.Namespace)
-	currentService, err := services.Get(c.service.Name)
+	currentService, err := services.Get(c.service.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -108,6 +109,6 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 
 func (c *ServiceControl) Status() error {
 	services := c.Client.Core().Services(c.service.Namespace)
-	_, err := services.Get(c.service.Name)
+	_, err := services.Get(c.service.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }

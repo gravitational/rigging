@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 )
@@ -91,7 +92,7 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 	c.configMap.UID = ""
 	c.configMap.SelfLink = ""
 	c.configMap.ResourceVersion = ""
-	_, err := configMaps.Get(c.configMap.Name)
+	_, err := configMaps.Get(c.configMap.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -106,6 +107,6 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 
 func (c *ConfigMapControl) Status() error {
 	configMaps := c.Client.Core().ConfigMaps(c.configMap.Namespace)
-	_, err := configMaps.Get(c.configMap.Name)
+	_, err := configMaps.Get(c.configMap.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }

@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 )
@@ -91,7 +92,7 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 	c.secret.UID = ""
 	c.secret.SelfLink = ""
 	c.secret.ResourceVersion = ""
-	_, err := secrets.Get(c.secret.Name)
+	_, err := secrets.Get(c.secret.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -106,6 +107,6 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 
 func (c *SecretControl) Status() error {
 	secrets := c.Client.Core().Secrets(c.secret.Namespace)
-	_, err := secrets.Get(c.secret.Name)
+	_, err := secrets.Get(c.secret.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }

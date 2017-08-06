@@ -22,9 +22,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewRCControl returns new instance of ReplicationController updater
@@ -87,7 +88,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 		set[key] = val
 	}
 	pods := c.Client.Core().Pods(replicationController.Namespace)
-	podList, err := pods.List(v1.ListOptions{
+	podList, err := pods.List(metav1.ListOptions{
 		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
@@ -117,7 +118,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("Delete")
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -150,7 +151,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	c.replicationController.UID = ""
 	c.replicationController.SelfLink = ""
 	c.replicationController.ResourceVersion = ""
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -179,7 +180,7 @@ func (c *RCControl) nodeSelector() labels.Selector {
 
 func (c *RCControl) Status() error {
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}

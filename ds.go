@@ -20,11 +20,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewDSControl returns new instance of DaemonSet updater
@@ -97,7 +98,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.daemonSet.ObjectMeta))
 
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -128,7 +129,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.daemonSet.ObjectMeta))
 
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -182,7 +183,7 @@ func (c *DSControl) nodeSelector() labels.Selector {
 
 func (c *DSControl) Status() error {
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -191,7 +192,7 @@ func (c *DSControl) Status() error {
 		return trace.Wrap(err)
 	}
 
-	nodes, err := c.Client.Core().Nodes().List(v1.ListOptions{
+	nodes, err := c.Client.Core().Nodes().List(metav1.ListOptions{
 		LabelSelector: c.nodeSelector().String(),
 	})
 	if err != nil {

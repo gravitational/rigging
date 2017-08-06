@@ -20,6 +20,7 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
@@ -44,7 +45,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.Job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	currentJob, err := jobs.Get(c.Job.Name)
+	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -79,7 +80,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.Job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	currentJob, err := jobs.Get(c.Job.Name)
+	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -134,7 +135,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 
 func (c *JobControl) Status() error {
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	job, err := jobs.Get(c.Job.Name)
+	job, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}

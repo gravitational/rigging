@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/client-go/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -58,7 +58,7 @@ func Namespace(namespace string) string {
 }
 
 // formatMeta formats this meta as text
-func formatMeta(meta v1.ObjectMeta) string {
+func formatMeta(meta metav1.ObjectMeta) string {
 	if meta.Namespace == "" {
 		return meta.Name
 	}

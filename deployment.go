@@ -20,9 +20,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewDeploymentControl returns new instance of Deployment updater
@@ -82,7 +83,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.deployment.ObjectMeta))
 
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.deployment.Name)
+	currentDeployment, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -106,7 +107,7 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.deployment.UID = ""
 	c.deployment.SelfLink = ""
 	c.deployment.ResourceVersion = ""
-	_, err := deployments.Get(c.deployment.Name)
+	_, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -129,7 +130,7 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 
 func (c *DeploymentControl) Status() error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.deployment.Name)
+	currentDeployment, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
