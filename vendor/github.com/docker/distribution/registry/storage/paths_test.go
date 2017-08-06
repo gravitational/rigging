@@ -15,31 +15,31 @@ func TestPathMapper(t *testing.T) {
 		{
 			spec: manifestRevisionPathSpec{
 				name:     "foo/bar",
-				revision: "sha256:abcdef0123456789",
+				revision: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		},
 		{
 			spec: manifestRevisionLinkPathSpec{
 				name:     "foo/bar",
-				revision: "sha256:abcdef0123456789",
+				revision: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789/link",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789/link",
 		},
 		{
 			spec: manifestSignatureLinkPathSpec{
 				name:      "foo/bar",
-				revision:  "sha256:abcdef0123456789",
-				signature: "sha256:abcdef0123456789",
+				revision:  "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+				signature: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789/signatures/sha256/abcdef0123456789/link",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789/signatures/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789/link",
 		},
 		{
 			spec: manifestSignaturesPathSpec{
 				name:     "foo/bar",
-				revision: "sha256:abcdef0123456789",
+				revision: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789/signatures",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/revisions/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789/signatures",
 		},
 		{
 			spec: manifestTagsPathSpec{
@@ -72,36 +72,17 @@ func TestPathMapper(t *testing.T) {
 			spec: manifestTagIndexEntryPathSpec{
 				name:     "foo/bar",
 				tag:      "thetag",
-				revision: "sha256:abcdef0123456789",
+				revision: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/tags/thetag/index/sha256/abcdef0123456789",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/tags/thetag/index/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		},
 		{
 			spec: manifestTagIndexEntryLinkPathSpec{
 				name:     "foo/bar",
 				tag:      "thetag",
-				revision: "sha256:abcdef0123456789",
+				revision: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/tags/thetag/index/sha256/abcdef0123456789/link",
-		},
-		{
-			spec: layerLinkPathSpec{
-				name:   "foo/bar",
-				digest: "tarsum.v1+test:abcdef",
-			},
-			expected: "/docker/registry/v2/repositories/foo/bar/_layers/tarsum/v1/test/abcdef/link",
-		},
-		{
-			spec: blobDataPathSpec{
-				digest: digest.Digest("tarsum.dev+sha512:abcdefabcdefabcdef908909909"),
-			},
-			expected: "/docker/registry/v2/blobs/tarsum/dev/sha512/ab/abcdefabcdefabcdef908909909/data",
-		},
-		{
-			spec: blobDataPathSpec{
-				digest: digest.Digest("tarsum.v1+sha256:abcdefabcdefabcdef908909909"),
-			},
-			expected: "/docker/registry/v2/blobs/tarsum/v1/sha256/ab/abcdefabcdefabcdef908909909/data",
+			expected: "/docker/registry/v2/repositories/foo/bar/_manifests/tags/thetag/index/sha256/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789/link",
 		},
 
 		{
@@ -140,4 +121,30 @@ func TestPathMapper(t *testing.T) {
 		t.Fatalf("expected an error when mapping an invalid revision: %s", badpath)
 	}
 
+}
+
+func TestDigestFromPath(t *testing.T) {
+	for _, testcase := range []struct {
+		path       string
+		expected   digest.Digest
+		multilevel bool
+		err        error
+	}{
+		{
+			path:       "/docker/registry/v2/blobs/sha256/99/9943fffae777400c0344c58869c4c2619c329ca3ad4df540feda74d291dd7c86/data",
+			multilevel: true,
+			expected:   "sha256:9943fffae777400c0344c58869c4c2619c329ca3ad4df540feda74d291dd7c86",
+			err:        nil,
+		},
+	} {
+		result, err := digestFromPath(testcase.path)
+		if err != testcase.err {
+			t.Fatalf("Unexpected error value %v when we wanted %v", err, testcase.err)
+		}
+
+		if result != testcase.expected {
+			t.Fatalf("Unexpected result value %v when we wanted %v", result, testcase.expected)
+
+		}
+	}
 }

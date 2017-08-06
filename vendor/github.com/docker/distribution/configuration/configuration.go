@@ -73,6 +73,10 @@ type Configuration struct {
 		// Secret specifies the secret key which HMAC tokens are created with.
 		Secret string `yaml:"secret,omitempty"`
 
+		// RelativeURLs specifies that relative URLs should be returned in
+		// Location headers
+		RelativeURLs bool `yaml:"relativeurls,omitempty"`
+
 		// TLS instructs the http server to listen with a TLS configuration.
 		// This only support simple tls configuration with a cert and key.
 		// Mostly, this is useful for testing situations or simple deployments
@@ -145,6 +149,21 @@ type Configuration struct {
 	Health Health `yaml:"health,omitempty"`
 
 	Proxy Proxy `yaml:"proxy,omitempty"`
+
+	// Compatibility is used for configurations of working with older or deprecated features.
+	Compatibility struct {
+		// Schema1 configures how schema1 manifests will be handled
+		Schema1 struct {
+			// TrustKey is the signing key to use for adding the signature to
+			// schema1 manifests.
+			TrustKey string `yaml:"signingkeyfile,omitempty"`
+
+			// DisableSignatureStore will cause all signatures attached to schema1 manifests
+			// to be ignored. Signatures will be generated on all schema1 manifest requests
+			// rather than only requests which converted schema2 to schema1.
+			DisableSignatureStore bool `yaml:"disablesignaturestore,omitempty"`
+		} `yaml:"schema1,omitempty"`
+	} `yaml:"compatibility,omitempty"`
 }
 
 // LogHook is composed of hook Level and Type.
