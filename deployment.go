@@ -96,7 +96,10 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 			return ConvertError(err)
 		}
 	}
-	err = deployments.Delete(c.deployment.Name, nil)
+	deletePolicy := metav1.DeletePropagationForeground
+	err = deployments.Delete(c.deployment.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 	return ConvertError(err)
 }
 
