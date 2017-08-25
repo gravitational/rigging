@@ -16,7 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
 )
@@ -94,7 +96,7 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 	return retry(ctx, retryAttempts, retryPeriod, reporter.Status)
 }
 
-// CollectPods collects pods created by some object matcher passed as fn
+// CollectPods collects pods matched by fn
 func CollectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
@@ -280,4 +282,52 @@ func isEmptyDetails(details *metav1.StatusDetails) bool {
 		return true
 	}
 	return false
+}
+
+// withExponentialBackoff retries the specified function fn exponentially.
+// If fn returns an already exists error, the operation is retried - any other error
+// aborts the execution.
+// It expects fn to return errors converted to trace type hierarchy with ConvertError
+func withExponentialBackoff(fn func() error) error {
+	const initialDelay = 1 * time.Second
+	backoff := wait.Backoff{
+		Duration: initialDelay,
+		Factor:   2.0,
+		Steps:    10,
+	}
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		err := fn()
+		if err != nil && !trace.IsAlreadyExists(err) {
+			// abort
+			return false, trace.Wrap(err)
+		}
+		if trace.IsAlreadyExists(err) {
+			// retry
+			return false, nil
+		}
+		return true, nil
+	})
+	return trace.Wrap(err)
+}
+
+func deletePodsList(podIface corev1.PodInterface, pods []v1.Pod, entry log.Entry) error {
+	for _, pod := range pods {
+		entry.Debugf("deleting pod %v", pod.Name)
+		err := ConvertError(podIface.Delete(pod.Name, nil))
+		if err != nil && !trace.IsNotFound(err) {
+			return ConvertError(err)
+		}
+	}
+	return nil
+}
+
+func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
+	for _, pod := range pods {
+		entry.Debugf("deleting pod %v", pod.Name)
+		err := ConvertError(podIface.Delete(pod.Name, nil))
+		if err != nil && !trace.IsNotFound(err) {
+			return ConvertError(err)
+		}
+	}
+	return nil
 }
