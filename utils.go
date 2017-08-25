@@ -329,5 +329,32 @@ func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.
 			return ConvertError(err)
 		}
 	}
+	for _, pod := range pods {
+		err := waitForObjectDeletion(func() error {
+			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			return ConvertError(err)
+		})
+		if err != nil {
+			entry.Warningf("failed to wait for deletion of Pod %v: %v", pod.Name, trace.DebugReport(err))
+		}
+	}
 	return nil
 }
+
+func waitForObjectDeletion(fn func() error) error {
+	return wait.PollImmediate(deletePollInterval, deleteTimeout, func() (bool, error) {
+		switch err := fn(); {
+		case err == nil:
+			return false, nil
+		case trace.IsNotFound(err):
+			return true, nil
+		default:
+			return false, err
+		}
+	})
+}
+
+const (
+	deletePollInterval = 1 * time.Second
+	deleteTimeout      = 5 * time.Minute
+)

@@ -115,11 +115,19 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return ConvertError(err)
 	}
+
+	errDelete := waitForObjectDeletion(func() error {
+		_, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
+
 	if !cascade {
 		c.Info("cascade not set, returning")
 	}
-
 	err = deletePods(pods, currentPods, *c.Entry)
+	if err == nil {
+		err = errDelete
+	}
 	return trace.Wrap(err)
 }
 

@@ -100,6 +100,14 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	err = deployments.Delete(c.deployment.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
+	if err != nil {
+		return ConvertError(err)
+	}
+
+	err = waitForObjectDeletion(func() error {
+		_, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
 	return ConvertError(err)
 }
 
