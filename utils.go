@@ -329,6 +329,11 @@ func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.
 			return ConvertError(err)
 		}
 	}
+
+	return trace.Wrap(waitForPods(podIface, pods, entry))
+}
+
+func waitForPods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
 	for _, pod := range pods {
 		err := waitForObjectDeletion(func() error {
 			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
