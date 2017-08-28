@@ -318,7 +318,8 @@ func deletePodsList(podIface corev1.PodInterface, pods []v1.Pod, entry log.Entry
 			return ConvertError(err)
 		}
 	}
-	return nil
+
+	return trace.Wrap(waitForPodsList(podIface, pods, entry))
 }
 
 func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
@@ -333,17 +334,32 @@ func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.
 	return trace.Wrap(waitForPods(podIface, pods, entry))
 }
 
-func waitForPods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
+func waitForPodsList(podIface corev1.PodInterface, pods []v1.Pod, entry log.Entry) error {
+	var errors []error
 	for _, pod := range pods {
 		err := waitForObjectDeletion(func() error {
 			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
 			return ConvertError(err)
 		})
 		if err != nil {
-			entry.Warningf("failed to wait for deletion of Pod %v: %v", pod.Name, trace.DebugReport(err))
+			errors = append(errors, err)
 		}
 	}
-	return nil
+	return trace.NewAggregate(errors...)
+}
+
+func waitForPods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
+	var errors []error
+	for _, pod := range pods {
+		err := waitForObjectDeletion(func() error {
+			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			return ConvertError(err)
+		})
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	return trace.NewAggregate(errors...)
 }
 
 func waitForObjectDeletion(fn func() error) error {

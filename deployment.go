@@ -123,7 +123,10 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 
 	// wait until all Pods have been cleaned up
 	err = waitForPods(pods, currentPods, *c.Entry)
-	return trace.Wrap(err)
+	if err != nil {
+		c.Warningf("failed to wait for Pods to clean up: %v", trace.DebugReport(err))
+	}
+	return nil
 }
 
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
