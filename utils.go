@@ -354,7 +354,7 @@ func waitForObjectDeletion(fn func() error) error {
 		case trace.IsNotFound(err):
 			return true, nil
 		default:
-			return false, err
+			return false, trace.Wrap(err)
 		}
 	})
 }

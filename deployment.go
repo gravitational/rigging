@@ -113,16 +113,16 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 		return ConvertError(err)
 	}
 
-	errDelete := waitForObjectDeletion(func() error {
+	err = waitForObjectDeletion(func() error {
 		_, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	// wait until all Pods have been cleaned up
 	err = waitForPods(pods, currentPods, *c.Entry)
-	if err == nil {
-		err = errDelete
-	}
 	return trace.Wrap(err)
 }
 

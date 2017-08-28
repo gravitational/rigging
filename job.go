@@ -65,18 +65,18 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 		return ConvertError(err)
 	}
 
-	errDelete := waitForObjectDeletion(func() error {
+	err = waitForObjectDeletion(func() error {
 		_, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	if !cascade {
 		c.Info("cascade not set, returning")
 	}
 	err = deletePods(pods, currentPods, *c.Entry)
-	if err == nil {
-		err = errDelete
-	}
 	return trace.Wrap(err)
 }
 
@@ -119,11 +119,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		_, err := jobs.Create(c.Job)
 		return ConvertError(err)
 	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
+	return trace.Wrap(err)
 }
 
 func (c *JobControl) Status() error {
