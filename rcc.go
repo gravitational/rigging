@@ -22,9 +22,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewRCControl returns new instance of ReplicationController updater
@@ -87,7 +88,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 		set[key] = val
 	}
 	pods := c.Client.Core().Pods(replicationController.Namespace)
-	podList, err := pods.List(v1.ListOptions{
+	podList, err := pods.List(metav1.ListOptions{
 		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
@@ -115,9 +116,10 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 }
 
 func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Delete")
+	c.Infof("delete %v", formatMeta(c.replicationController.ObjectMeta))
+
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -126,47 +128,63 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	c.Infof("deleting")
-	err = rcs.Delete(c.replicationController.Name, nil)
+	c.Info("deleting current replication controller")
+	deletePolicy := metav1.DeletePropagationForeground
+	err = rcs.Delete(c.replicationController.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 	if err != nil {
 		return ConvertError(err)
 	}
+
+	err = waitForObjectDeletion(func() error {
+		_, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	if !cascade {
-		c.Infof("cascade not set, returning")
+		c.Info("cascade not set, returning")
 	}
-	c.Infof("deleting pods %v", len(currentPods))
-	for _, pod := range currentPods {
-		log.Infof("deleting pod %v", pod.Name)
-		if err := pods.Delete(pod.Name, nil); err != nil {
-			return ConvertError(err)
-		}
-	}
-	return nil
+	err = deletePodsList(pods, currentPods, *c.Entry)
+	return trace.Wrap(err)
 }
 
 func (c *RCControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert")
+	c.Infof("upsert %v", formatMeta(c.replicationController.ObjectMeta))
+
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-	c.replicationController.UID = ""
-	c.replicationController.SelfLink = ""
-	c.replicationController.ResourceVersion = ""
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
+		currentRC = nil
+	}
+
+	if currentRC != nil {
+		control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
+		if err != nil {
+			return ConvertError(err)
+		}
+		err = control.Delete(ctx, true)
+		if err != nil {
+			return ConvertError(err)
+		}
+	}
+
+	c.replicationController.UID = ""
+	c.replicationController.SelfLink = ""
+	c.replicationController.ResourceVersion = ""
+
+	err = withExponentialBackoff(func() error {
 		_, err = rcs.Create(&c.replicationController)
 		return ConvertError(err)
-	}
-	// delete all pods and the old replication controller
-	control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
-	err = control.Delete(ctx, true)
-	if err != nil {
-		return ConvertError(err)
-	}
-	_, err = rcs.Create(&c.replicationController)
-	return ConvertError(err)
+	})
+	return trace.Wrap(err)
 }
 
 func (c *RCControl) nodeSelector() labels.Selector {
@@ -179,7 +197,7 @@ func (c *RCControl) nodeSelector() labels.Selector {
 
 func (c *RCControl) Status() error {
 	rcs := c.Client.Core().ReplicationControllers(c.replicationController.Namespace)
-	currentRC, err := rcs.Get(c.replicationController.Name)
+	currentRC, err := rcs.Get(c.replicationController.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}

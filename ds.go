@@ -20,11 +20,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewDSControl returns new instance of DaemonSet updater
@@ -97,7 +98,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.daemonSet.ObjectMeta))
 
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -106,29 +107,35 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	c.Infof("deleting current daemon set")
-	err = daemons.Delete(c.daemonSet.Name, nil)
+	c.Info("deleting current daemon set")
+	deletePolicy := metav1.DeletePropagationForeground
+	err = daemons.Delete(c.daemonSet.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 	if err != nil {
 		return ConvertError(err)
 	}
+
+	err = waitForObjectDeletion(func() error {
+		_, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	if !cascade {
-		c.Infof("cascade not set, returning")
+		c.Info("cascade not set, returning")
 	}
-	c.Infof("deleting pods")
-	for _, pod := range currentPods {
-		log.Infof("deleting pod %v", pod.Name)
-		if err := pods.Delete(pod.Name, nil); err != nil {
-			return ConvertError(err)
-		}
-	}
-	return nil
+	err = deletePods(pods, currentPods, *c.Entry)
+	return trace.Wrap(err)
 }
 
 func (c *DSControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.daemonSet.ObjectMeta))
 
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -137,39 +144,28 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 		// api always returns object, this is inconvenent
 		currentDS = nil
 	}
-	pods := c.Client.Core().Pods(c.daemonSet.Namespace)
-	var currentPods map[string]v1.Pod
+
 	if currentDS != nil {
-		c.Infof("currentDS: %v", currentDS.UID)
-		currentPods, err = c.collectPods(currentDS)
+		control, err := NewDSControl(DSConfig{DaemonSet: currentDS, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		c.Infof("deleting current daemon set")
-		err = daemons.Delete(c.daemonSet.Name, nil)
+		err = control.Delete(ctx, true)
 		if err != nil {
 			return ConvertError(err)
 		}
 	}
-	c.Infof("creating new daemon set")
+
+	c.Info("creating new daemon set")
 	c.daemonSet.UID = ""
 	c.daemonSet.SelfLink = ""
 	c.daemonSet.ResourceVersion = ""
-	_, err = daemons.Create(&c.daemonSet)
-	if err != nil {
+
+	err = withExponentialBackoff(func() error {
+		_, err = daemons.Create(&c.daemonSet)
 		return ConvertError(err)
-	}
-	c.Infof("created successfully")
-	if currentDS != nil {
-		c.Infof("deleting pods created by previous daemon set")
-		for _, pod := range currentPods {
-			c.Infof("deleting pod %v", pod.Name)
-			if err := pods.Delete(pod.Name, nil); err != nil {
-				return ConvertError(err)
-			}
-		}
-	}
-	return nil
+	})
+	return trace.Wrap(err)
 }
 
 func (c *DSControl) nodeSelector() labels.Selector {
@@ -182,7 +178,7 @@ func (c *DSControl) nodeSelector() labels.Selector {
 
 func (c *DSControl) Status() error {
 	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
-	currentDS, err := daemons.Get(c.daemonSet.Name)
+	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -191,7 +187,7 @@ func (c *DSControl) Status() error {
 		return trace.Wrap(err)
 	}
 
-	nodes, err := c.Client.Core().Nodes().List(v1.ListOptions{
+	nodes, err := c.Client.Core().Nodes().List(metav1.ListOptions{
 		LabelSelector: c.nodeSelector().String(),
 	})
 	if err != nil {

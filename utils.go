@@ -13,12 +13,14 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/errors"
-	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 type action string
@@ -94,7 +96,7 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 	return retry(ctx, retryAttempts, retryPeriod, reporter.Status)
 }
 
-// CollectPods collects pods created by some object matcher passed as fn
+// CollectPods collects pods matched by fn
 func CollectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
 	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
@@ -102,7 +104,7 @@ func CollectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 		set[key] = val
 	}
 
-	podList, err := client.Core().Pods(namespace).List(v1.ListOptions{
+	podList, err := client.Core().Pods(namespace).List(metav1.ListOptions{
 		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
@@ -261,7 +263,7 @@ func ConvertErrorWithContext(err error, format string, args ...interface{}) erro
 
 	status := statusErr.Status()
 	switch {
-	case status.Code == http.StatusConflict && status.Reason == unversioned.StatusReasonAlreadyExists:
+	case status.Code == http.StatusConflict && status.Reason == metav1.StatusReasonAlreadyExists:
 		return trace.AlreadyExists(message)
 	case status.Code == http.StatusNotFound:
 		return trace.NotFound(message)
@@ -271,7 +273,7 @@ func ConvertErrorWithContext(err error, format string, args ...interface{}) erro
 	return err
 }
 
-func isEmptyDetails(details *unversioned.StatusDetails) bool {
+func isEmptyDetails(details *metav1.StatusDetails) bool {
 	if details == nil {
 		return true
 	}
@@ -281,3 +283,99 @@ func isEmptyDetails(details *unversioned.StatusDetails) bool {
 	}
 	return false
 }
+
+// withExponentialBackoff retries the specified function fn exponentially.
+// If fn returns an already exists error, the operation is retried - any other error
+// aborts the execution.
+// It expects fn to return errors converted to trace type hierarchy with ConvertError
+func withExponentialBackoff(fn func() error) error {
+	const initialDelay = 1 * time.Second
+	backoff := wait.Backoff{
+		Duration: initialDelay,
+		Factor:   2.0,
+		Steps:    10,
+	}
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		err := fn()
+		if err != nil && !trace.IsAlreadyExists(err) {
+			// abort
+			return false, trace.Wrap(err)
+		}
+		if trace.IsAlreadyExists(err) {
+			// retry
+			return false, nil
+		}
+		return true, nil
+	})
+	return trace.Wrap(err)
+}
+
+func deletePodsList(podIface corev1.PodInterface, pods []v1.Pod, entry log.Entry) error {
+	for _, pod := range pods {
+		entry.Debugf("deleting pod %v", pod.Name)
+		err := ConvertError(podIface.Delete(pod.Name, nil))
+		if err != nil && !trace.IsNotFound(err) {
+			return ConvertError(err)
+		}
+	}
+
+	return trace.Wrap(waitForPodsList(podIface, pods, entry))
+}
+
+func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
+	for _, pod := range pods {
+		entry.Debugf("deleting pod %v", pod.Name)
+		err := ConvertError(podIface.Delete(pod.Name, nil))
+		if err != nil && !trace.IsNotFound(err) {
+			return ConvertError(err)
+		}
+	}
+
+	return trace.Wrap(waitForPods(podIface, pods, entry))
+}
+
+func waitForPodsList(podIface corev1.PodInterface, pods []v1.Pod, entry log.Entry) error {
+	var errors []error
+	for _, pod := range pods {
+		err := waitForObjectDeletion(func() error {
+			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			return ConvertError(err)
+		})
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	return trace.NewAggregate(errors...)
+}
+
+func waitForPods(podIface corev1.PodInterface, pods map[string]v1.Pod, entry log.Entry) error {
+	var errors []error
+	for _, pod := range pods {
+		err := waitForObjectDeletion(func() error {
+			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			return ConvertError(err)
+		})
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	return trace.NewAggregate(errors...)
+}
+
+func waitForObjectDeletion(fn func() error) error {
+	return wait.PollImmediate(deletePollInterval, deleteTimeout, func() (bool, error) {
+		switch err := fn(); {
+		case err == nil:
+			return false, nil
+		case trace.IsNotFound(err):
+			return true, nil
+		default:
+			return false, trace.Wrap(err)
+		}
+	})
+}
+
+const (
+	deletePollInterval = 1 * time.Second
+	deleteTimeout      = 5 * time.Minute
+)

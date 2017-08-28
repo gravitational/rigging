@@ -19,6 +19,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/rbac/v1alpha1"
 )
@@ -77,7 +78,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := roles.Get(c.Name)
+	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -92,7 +93,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 
 func (c *RoleControl) Status() error {
 	roles := c.Client.RbacV1alpha1().Roles(c.Namespace)
-	_, err := roles.Get(c.Name)
+	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
@@ -150,7 +151,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := roles.Get(c.Name)
+	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -165,7 +166,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 
 func (c *ClusterRoleControl) Status() error {
 	roles := c.Client.RbacV1alpha1().ClusterRoles()
-	_, err := roles.Get(c.Name)
+	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
@@ -223,7 +224,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := bindings.Get(c.Name)
+	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -238,7 +239,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 
 func (c *RoleBindingControl) Status() error {
 	bindings := c.Client.RbacV1alpha1().RoleBindings(c.Namespace)
-	_, err := bindings.Get(c.Name)
+	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
@@ -296,7 +297,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := bindings.Get(c.Name)
+	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -311,6 +312,6 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 
 func (c *ClusterRoleBindingControl) Status() error {
 	bindings := c.Client.RbacV1alpha1().ClusterRoleBindings()
-	_, err := bindings.Get(c.Name)
+	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }

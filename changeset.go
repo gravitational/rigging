@@ -27,15 +27,14 @@ import (
 	log "github.com/Sirupsen/logrus"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	api "k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/meta"
-	"k8s.io/client-go/pkg/api/unversioned"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/runtime"
-	serializer "k8s.io/client-go/pkg/runtime/serializer"
-	"k8s.io/client-go/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 )
 
@@ -67,7 +66,7 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 	}
 
 	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
-	cfg.GroupVersion = &unversioned.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
+	cfg.GroupVersion = &schema.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
 
 	clt, err := rest.RESTClientFor(&cfg)
 	if err != nil {
@@ -117,7 +116,7 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 	if tr.Spec.Status != ChangesetStatusInProgress {
 		return trace.CompareFailed("cannot update changeset - expected status %q, got %q", ChangesetStatusInProgress, tr.Spec.Status)
 	}
-	var kind unversioned.TypeMeta
+	var kind metav1.TypeMeta
 	err = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), DefaultBufferSize).Decode(&kind)
 	if err != nil {
 		return trace.Wrap(err)
@@ -350,7 +349,7 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Extensions().DaemonSets(daemonset.Namespace).Get(daemonset.Name)
+		existing, err := cs.Client.Extensions().DaemonSets(daemonset.Namespace).Get(daemonset.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -371,7 +370,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte, uid string) err
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Batch().Jobs(job.Namespace).Get(job.Name)
+		existing, err := cs.Client.Batch().Jobs(job.Namespace).Get(job.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -392,7 +391,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ReplicationControllers(rc.Namespace).Get(rc.Name)
+		existing, err := cs.Client.ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -413,7 +412,7 @@ func (cs *Changeset) statusDeployment(ctx context.Context, data []byte, uid stri
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Extensions().Deployments(deployment.Namespace).Get(deployment.Name)
+		existing, err := cs.Client.Extensions().Deployments(deployment.Namespace).Get(deployment.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -434,7 +433,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string)
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Services(service.Namespace).Get(service.Name)
+		existing, err := cs.Client.Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -455,7 +454,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Secrets(secret.Namespace).Get(secret.Name)
+		existing, err := cs.Client.Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -476,7 +475,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ConfigMaps(configMap.Namespace).Get(configMap.Name)
+		existing, err := cs.Client.ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -497,7 +496,7 @@ func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ServiceAccounts(account.Namespace).Get(account.Name)
+		existing, err := cs.Client.ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -518,7 +517,7 @@ func (cs *Changeset) statusRole(ctx context.Context, data []byte, uid string) er
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().Roles(role.Namespace).Get(role.Name)
+		existing, err := cs.Client.RbacV1alpha1().Roles(role.Namespace).Get(role.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -539,7 +538,7 @@ func (cs *Changeset) statusClusterRole(ctx context.Context, data []byte, uid str
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(role.Name)
+		existing, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(role.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -560,7 +559,7 @@ func (cs *Changeset) statusRoleBinding(ctx context.Context, data []byte, uid str
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace).Get(binding.Name)
+		existing, err := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace).Get(binding.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -581,7 +580,7 @@ func (cs *Changeset) statusClusterRoleBinding(ctx context.Context, data []byte, 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(binding.Name)
+		existing, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(binding.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -602,7 +601,7 @@ func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, u
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(policy.Name)
+		existing, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(policy.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -617,7 +616,7 @@ func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, u
 	return control.Status()
 }
 
-func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj meta.Object, fn func() error) error {
+func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj metav1.Object, fn func() error) error {
 	data, err := goyaml.Marshal(obj)
 	if err != nil {
 		return trace.Wrap(err)
@@ -642,7 +641,7 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 }
 
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name)
+	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -656,7 +655,7 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 }
 
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name)
+	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -670,7 +669,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 }
 
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name)
+	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -684,7 +683,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 }
 
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name)
+	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -698,7 +697,7 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 }
 
 func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name)
+	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -712,7 +711,7 @@ func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, n
 }
 
 func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name)
+	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -726,7 +725,7 @@ func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource,
 }
 
 func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name)
+	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -740,7 +739,7 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 }
 
 func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	account, err := cs.Client.Core().ServiceAccounts(Namespace(namespace)).Get(name)
+	account, err := cs.Client.Core().ServiceAccounts(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -754,7 +753,7 @@ func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetReso
 }
 
 func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	role, err := cs.Client.RbacV1alpha1().Roles(Namespace(namespace)).Get(name)
+	role, err := cs.Client.RbacV1alpha1().Roles(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -768,7 +767,7 @@ func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, name
 }
 
 func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	role, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(name)
+	role, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -782,7 +781,7 @@ func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResourc
 }
 
 func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	binding, err := cs.Client.RbacV1alpha1().RoleBindings(Namespace(namespace)).Get(name)
+	binding, err := cs.Client.RbacV1alpha1().RoleBindings(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -796,7 +795,7 @@ func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResourc
 }
 
 func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	binding, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(name)
+	binding, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -810,7 +809,7 @@ func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *Changeset
 }
 
 func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	policy, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(name)
+	policy, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -1143,7 +1142,7 @@ func (cs *Changeset) revertPodSecurityPolicy(ctx context.Context, item *Changese
 	return control.Upsert(ctx)
 }
 
-func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old meta.Object, new meta.Object, fn func() error) (*ChangesetResource, error) {
+func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, old metav1.Object, new metav1.Object, fn func() error) (*ChangesetResource, error) {
 	to, err := goyaml.Marshal(new)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1185,7 +1184,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 	log.Infof("upsert job %v", formatMeta(job.ObjectMeta))
 
 	jobs := cs.Client.Batch().Jobs(job.Namespace)
-	currentJob, err := jobs.Get(job.Name)
+	currentJob, err := jobs.Get(job.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1215,7 +1214,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 	})
 	log.Infof("upsert daemon set %v", formatMeta(ds.ObjectMeta))
 	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
-	currentDS, err := daemons.Get(ds.Name)
+	currentDS, err := daemons.Get(ds.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1244,7 +1243,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 	})
 	log.Infof("upsert replication controller %v", formatMeta(rc.ObjectMeta))
 	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
-	currentRC, err := rcs.Get(rc.Name)
+	currentRC, err := rcs.Get(rc.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1273,7 +1272,7 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 	})
 	log.Infof("upsert deployment %v", formatMeta(deployment.ObjectMeta))
 	deployments := cs.Client.Extensions().Deployments(deployment.Namespace)
-	currentDeployment, err := deployments.Get(deployment.Name)
+	currentDeployment, err := deployments.Get(deployment.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1302,7 +1301,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 	})
 	log.Infof("upsert service %v", formatMeta(service.ObjectMeta))
 	services := cs.Client.Core().Services(service.Namespace)
-	currentService, err := services.Get(service.Name)
+	currentService, err := services.Get(service.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1330,7 +1329,7 @@ func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetReso
 		"service_account": formatMeta(account.ObjectMeta),
 	})
 	accounts := cs.Client.Core().ServiceAccounts(account.Namespace)
-	currentAccount, err := accounts.Get(account.Name)
+	currentAccount, err := accounts.Get(account.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1358,7 +1357,7 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 		"role": formatMeta(role.ObjectMeta),
 	})
 	roles := cs.Client.RbacV1alpha1().Roles(role.Namespace)
-	currentRole, err := roles.Get(role.Name)
+	currentRole, err := roles.Get(role.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1386,7 +1385,7 @@ func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResourc
 		"cluster_role": formatMeta(role.ObjectMeta),
 	})
 	roles := cs.Client.RbacV1alpha1().ClusterRoles()
-	currentRole, err := roles.Get(role.Name)
+	currentRole, err := roles.Get(role.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1414,7 +1413,7 @@ func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResourc
 		"role_binding": formatMeta(binding.ObjectMeta),
 	})
 	bindings := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace)
-	currentBinding, err := bindings.Get(binding.Name)
+	currentBinding, err := bindings.Get(binding.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1442,7 +1441,7 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 		"cluster_role_binding": formatMeta(binding.ObjectMeta),
 	})
 	bindings := cs.Client.RbacV1alpha1().ClusterRoleBindings()
-	currentBinding, err := bindings.Get(binding.Name)
+	currentBinding, err := bindings.Get(binding.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1470,7 +1469,7 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		"pod_security_policy": formatMeta(policy.ObjectMeta),
 	})
 	policies := cs.Client.ExtensionsV1beta1().PodSecurityPolicies()
-	currentPolicy, err := policies.Get(policy.Name)
+	currentPolicy, err := policies.Get(policy.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1499,7 +1498,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 	})
 	log.Infof("upsert configmap %v", formatMeta(configMap.ObjectMeta))
 	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
-	currentConfigMap, err := configMaps.Get(configMap.Name)
+	currentConfigMap, err := configMaps.Get(configMap.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1528,7 +1527,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 	})
 	log.Infof("upsert secret %v", formatMeta(secret.ObjectMeta))
 	secrets := cs.Client.Core().Secrets(secret.Namespace)
-	currentSecret, err := secrets.Get(secret.Name)
+	currentSecret, err := secrets.Get(secret.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -1549,7 +1548,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 func (cs *Changeset) Init(ctx context.Context) error {
 	log.Debug("changeset init")
 	tpr := &v1beta1.ThirdPartyResource{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: ChangesetResourceName,
 		},
 		Versions: []v1beta1.APIVersion{
@@ -1585,11 +1584,11 @@ func (cs *Changeset) List(ctx context.Context, namespace string) (*ChangesetList
 // error is returned.
 func (cs *Changeset) Create(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
 	res := &ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       KindChangeset,
 			APIVersion: ChangesetAPIVersion,
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
@@ -1651,11 +1650,11 @@ func (cs *Changeset) get(namespace, name string) (*ChangesetResource, error) {
 
 func (cs *Changeset) createOrRead(namespace, name string, spec ChangesetSpec) (*ChangesetResource, error) {
 	res := &ChangesetResource{
-		TypeMeta: unversioned.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       KindChangeset,
 			APIVersion: ChangesetAPIVersion,
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},

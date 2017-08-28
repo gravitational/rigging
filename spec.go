@@ -20,30 +20,30 @@ import (
 	"time"
 
 	"github.com/gravitational/trace"
-	"k8s.io/client-go/pkg/api/unversioned"
-	"k8s.io/client-go/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ChangesetList struct {
-	unversioned.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
 	// Standard list metadata
 	// More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
-	unversioned.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 	// Items is a list of third party objects
 	Items []ChangesetResource `json:"items"`
 }
 
-func (tr *ChangesetList) GetObjectKind() unversioned.ObjectKind {
+func (tr *ChangesetList) GetObjectKind() schema.ObjectKind {
 	return &tr.TypeMeta
 }
 
 type ChangesetResource struct {
-	unversioned.TypeMeta `json:",inline"`
-	v1.ObjectMeta        `json:"metadata,omitempty"`
-	Spec                 ChangesetSpec `json:"spec"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              ChangesetSpec `json:"spec"`
 }
 
-func (tr *ChangesetResource) GetObjectKind() unversioned.ObjectKind {
+func (tr *ChangesetResource) GetObjectKind() schema.ObjectKind {
 	return &tr.TypeMeta
 }
 

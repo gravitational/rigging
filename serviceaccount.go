@@ -19,6 +19,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 )
@@ -77,7 +78,7 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := accounts.Get(c.Name)
+	_, err := accounts.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -92,6 +93,6 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 
 func (c *ServiceAccountControl) Status() error {
 	accounts := c.Client.Core().ServiceAccounts(c.Namespace)
-	_, err := accounts.Get(c.Name)
+	_, err := accounts.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }

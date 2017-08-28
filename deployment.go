@@ -20,9 +20,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/labels"
 )
 
 // NewDeploymentControl returns new instance of Deployment updater
@@ -82,12 +85,19 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.deployment.ObjectMeta))
 
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.deployment.Name)
+	currentDeployment, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
+
+	pods := c.Client.Core().Pods(c.deployment.Namespace)
+	currentPods, err := c.collectPods(currentDeployment)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	if cascade {
-		// scale deployment down to delete all replicas and pods
+		// scale deployment down to delete the pods
 		var replicas int32
 		currentDeployment.Spec.Replicas = &replicas
 		currentDeployment, err = deployments.Update(currentDeployment)
@@ -95,8 +105,28 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 			return ConvertError(err)
 		}
 	}
-	err = deployments.Delete(c.deployment.Name, nil)
-	return ConvertError(err)
+	deletePolicy := metav1.DeletePropagationForeground
+	err = deployments.Delete(c.deployment.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
+	if err != nil {
+		return ConvertError(err)
+	}
+
+	err = waitForObjectDeletion(func() error {
+		_, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// wait until all Pods have been cleaned up
+	err = waitForPods(pods, currentPods, *c.Entry)
+	if err != nil {
+		c.Warningf("failed to wait for Pods to clean up: %v", trace.DebugReport(err))
+	}
+	return nil
 }
 
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
@@ -106,7 +136,7 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.deployment.UID = ""
 	c.deployment.SelfLink = ""
 	c.deployment.ResourceVersion = ""
-	_, err := deployments.Get(c.deployment.Name)
+	_, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -129,7 +159,7 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 
 func (c *DeploymentControl) Status() error {
 	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.deployment.Name)
+	currentDeployment, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -147,4 +177,15 @@ func (c *DeploymentControl) Status() error {
 			deployment, replicas, currentDeployment.Status.AvailableReplicas)
 	}
 	return nil
+}
+
+func (c *DeploymentControl) collectPods(deployment *v1beta1.Deployment) (map[string]v1.Pod, error) {
+	var labels map[string]string
+	if deployment.Spec.Selector != nil {
+		labels = deployment.Spec.Selector.MatchLabels
+	}
+	pods, err := CollectPods(deployment.Namespace, labels, c.Entry, c.Client, func(ref api.ObjectReference) bool {
+		return ref.Kind == KindDeployment && ref.UID == deployment.UID
+	})
+	return pods, ConvertError(err)
 }

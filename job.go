@@ -20,6 +20,7 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/v1"
@@ -44,7 +45,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.Job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	currentJob, err := jobs.Get(c.Job.Name)
+	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -56,30 +57,34 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	c.Info("deleting current job")
-	err = jobs.Delete(c.Job.Name, nil)
+	deletePolicy := metav1.DeletePropagationForeground
+	err = jobs.Delete(c.Job.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 	if err != nil {
 		return ConvertError(err)
 	}
 
-	if !cascade {
-		c.Debug("cascade not set, returning")
+	err = waitForObjectDeletion(func() error {
+		_, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
+		return ConvertError(err)
+	})
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
-	c.Info("deleting pods")
-	for _, pod := range currentPods {
-		log.Infof("deleting pod %v", pod.Name)
-		if err := pods.Delete(pod.Name, nil); err != nil {
-			return ConvertError(err)
-		}
+	if !cascade {
+		c.Info("cascade not set, returning")
 	}
-	return nil
+	err = deletePods(pods, currentPods, *c.Entry)
+	return trace.Wrap(err)
 }
 
 func (c *JobControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.Job.ObjectMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	currentJob, err := jobs.Get(c.Job.Name)
+	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -89,17 +94,12 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		currentJob = nil
 	}
 
-	pods := c.Core().Pods(c.Job.Namespace)
-	var currentPods map[string]v1.Pod
 	if currentJob != nil {
-		c.Infof("currentJob: %v", currentJob.UID)
-		currentPods, err = c.collectPods(currentJob)
+		control, err := NewJobControl(JobConfig{Job: currentJob, Clientset: c.Clientset})
 		if err != nil {
-			return trace.Wrap(err)
+			return ConvertError(err)
 		}
-
-		c.Info("deleting current job")
-		err = jobs.Delete(c.Job.Name, nil)
+		err = control.Delete(ctx, true)
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -114,27 +114,17 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		delete(c.Job.Spec.Selector.MatchLabels, ControllerUIDLabel)
 		delete(c.Job.Spec.Template.Labels, ControllerUIDLabel)
 	}
-	_, err = jobs.Create(c.Job)
-	if err != nil {
-		return ConvertError(err)
-	}
 
-	c.Info("job created successfully")
-	if currentJob != nil {
-		c.Info("deleting pods created by previous job")
-		for _, pod := range currentPods {
-			c.Infof("deleting pod %v", formatMeta(pod.ObjectMeta))
-			if err := pods.Delete(pod.Name, nil); err != nil {
-				return ConvertError(err)
-			}
-		}
-	}
-	return nil
+	err = withExponentialBackoff(func() error {
+		_, err := jobs.Create(c.Job)
+		return ConvertError(err)
+	})
+	return trace.Wrap(err)
 }
 
 func (c *JobControl) Status() error {
 	jobs := c.Batch().Jobs(c.Job.Namespace)
-	job, err := jobs.Get(c.Job.Name)
+	job, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
