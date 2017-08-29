@@ -23,7 +23,8 @@
 
 [[constraint]]
   name = "github.com/Sirupsen/logrus"
-  revision = "10f801ebc38b33738c9d17d50860f484a0988ff5"
+  revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
+  source = "github.com/gravitational/logrus"
 
 [[constraint]]
   name = "github.com/ghodss/yaml"
