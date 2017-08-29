@@ -15,7 +15,8 @@
 [[projects]]
   name = "github.com/Sirupsen/logrus"
   packages = [".","hooks/syslog"]
-  revision = "10f801ebc38b33738c9d17d50860f484a0988ff5"
+  revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
+  source = "github.com/gravitational/logrus"
 
 [[projects]]
   branch = "master"
@@ -208,6 +209,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e953af4be8cb3ba503042389c86f10d0b68ba2d401d84f4b6858f023679de5e5"
+  inputs-digest = "de4faf5f352dc0b6399df9ac412e5409be5111bd09b8a728b1816803a4646ce8"
   solver-name = "gps-cdcl"
   solver-version = 1
