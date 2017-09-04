@@ -166,6 +166,8 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	case ChangesetStatusCommitted:
 		// Nothing to do
 		return nil
+	case ChangesetStatusReverted:
+		return trace.BadParameter("changeset reverted")
 	}
 
 	if retryAttempts == 0 {
