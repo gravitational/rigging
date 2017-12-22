@@ -1547,6 +1547,14 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 
 func (cs *Changeset) Init(ctx context.Context) error {
 	log.Debug("changeset init")
+
+	version, err := cs.Client.ServerVersion()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Debugf("server version: %v.%v", version.Major, version.Minor)
+
 	tpr := &v1beta1.ThirdPartyResource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ChangesetResourceName,
@@ -1556,7 +1564,8 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		},
 		Description: "Changeset",
 	}
-	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+	_, err = cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {
