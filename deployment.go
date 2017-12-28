@@ -20,12 +20,11 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	appsv1 "k8s.io/api/apps/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 // NewDeploymentControl returns new instance of Deployment updater
@@ -34,7 +33,7 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var rc *v1beta1.Deployment
+	var rc *appsv1.Deployment
 	if config.Deployment != nil {
 		rc = config.Deployment
 	} else {
@@ -58,7 +57,7 @@ type DeploymentConfig struct {
 	// Reader with deployment to update, will be used if present
 	Reader io.Reader
 	// Deployment is already parsed deployment, will be used if present
-	Deployment *v1beta1.Deployment
+	Deployment *appsv1.Deployment
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -77,14 +76,14 @@ func (c *DeploymentConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type DeploymentControl struct {
 	DeploymentConfig
-	deployment v1beta1.Deployment
+	deployment appsv1.Deployment
 	*log.Entry
 }
 
 func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.deployment.ObjectMeta))
 
-	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
+	deployments := c.Client.Apps().Deployments(c.deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
@@ -132,7 +131,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.deployment.ObjectMeta))
 
-	deployments := c.Client.Extensions().Deployments(c.deployment.Namespace)
+	deployments := c.Client.Apps().Deployments(c.deployment.Namespace)
 	c.deployment.UID = ""
 	c.deployment.SelfLink = ""
 	c.deployment.ResourceVersion = ""
@@ -179,12 +178,12 @@ func (c *DeploymentControl) Status() error {
 	return nil
 }
 
-func (c *DeploymentControl) collectPods(deployment *v1beta1.Deployment) (map[string]v1.Pod, error) {
+func (c *DeploymentControl) collectPods(deployment *appsv1.Deployment) (map[string]corev1.Pod, error) {
 	var labels map[string]string
 	if deployment.Spec.Selector != nil {
 		labels = deployment.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(deployment.Namespace, labels, c.Entry, c.Client, func(ref api.ObjectReference) bool {
+	pods, err := CollectPods(deployment.Namespace, labels, c.Entry, c.Client, func(ref corev1.ObjectReference) bool {
 		return ref.Kind == KindDeployment && ref.UID == deployment.UID
 	})
 	return pods, ConvertError(err)
