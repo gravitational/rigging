@@ -21,21 +21,20 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
+	api "k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/rest"
 )
 
@@ -66,7 +65,7 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		cfg.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
-	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
 	cfg.GroupVersion = &schema.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
 
 	clt, err := rest.RESTClientFor(&cfg)
@@ -392,8 +391,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-
-		existing, err := cs.Client.CoreV1().ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
+		existing, err := cs.Client.ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -435,7 +433,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string)
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.CoreV1().Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -456,7 +454,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -477,7 +475,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.CoreV1().ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
+		existing, err := cs.Client.ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -498,7 +496,7 @@ func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.CoreV1().ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
+		existing, err := cs.Client.ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -643,7 +641,7 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 }
 
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	ds, err := cs.Client.Apps().DaemonSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -685,7 +683,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 }
 
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	deployment, err := cs.Client.Apps().Deployments(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -1549,53 +1547,27 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 
 func (cs *Changeset) Init(ctx context.Context) error {
 	log.Debug("changeset init")
-
-	version, err := cs.Client.ServerVersion()
-	if err != nil {
-		return trace.Wrap(err)
+	tpr := &v1beta1.ThirdPartyResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ChangesetResourceName,
+		},
+		Versions: []v1beta1.APIVersion{
+			{Name: ChangesetVersion},
+		},
+		Description: "Changeset",
 	}
-
-	log.Debugf("server version: %v.%v", version.Major, version.Minor)
-	major, _ := strconv.Atoi(version.Major)
-	minor, _ := strconv.Atoi(version.Minor)
-
-	// Deprecated, if below version 1.7 we'll use third party resources.
-	// TODO remove Third Party Resource when we no longer support kuberntes velow 1.7
-	if major == 1 && minor < 7 {
-		tpr := &v1beta1.ThirdPartyResource{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ChangesetResourceName,
-			},
-			Versions: []v1beta1.APIVersion{
-				{Name: ChangesetVersion},
-			},
-			Description: "Changeset",
-		}
-		_, err = cs.Client.Extensions().ThirdPartyResources().Create(tpr)
-
-		err = ConvertError(err)
-		if err != nil {
-			if !trace.IsAlreadyExists(err) {
-				log.WithError(err).Error("third party resource error")
-				return trace.Wrap(err)
-			}
-		}
-		// wait for the controller to init by trying to list stuff
-		err = retry(ctx, 30, time.Second, func() error {
-			_, err := cs.list(DefaultNamespace)
-			return err
-		})
-		if err != nil {
-			log.WithError(err).Error("error waiting for controller init")
+	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsAlreadyExists(err) {
 			return trace.Wrap(err)
 		}
-
-	} else {
-		// If newer than 1.7, let's use Custom Resource Definitions
-
 	}
-	log.Info("Init completed without error")
-	return nil
+	// wait for the controller to init by trying to list stuff
+	return retry(ctx, 30, time.Second, func() error {
+		_, err := cs.list(DefaultNamespace)
+		return err
+	})
 }
 
 func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*ChangesetResource, error) {

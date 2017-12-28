@@ -297,7 +297,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		fmt.Printf("no errors detected for %v\n", resource.Name)
 		return nil
 	case rigging.KindDaemonSet:
-		ds, err := client.Apps().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
+		ds, err := client.Extensions().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -310,7 +310,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		}
 		return rigging.PollStatus(ctx, retryAttempts, retryPeriod, updater)
 	case rigging.KindDeployment:
-		deployment, err := client.Apps().Deployments(namespace).Get(resource.Name, metav1.GetOptions{})
+		deployment, err := client.Extensions().Deployments(namespace).Get(resource.Name, metav1.GetOptions{})
 		if err != nil {
 			return trace.Wrap(err)
 		}

@@ -19,9 +19,9 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/api/rbac/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/apis/rbac/v1alpha1"
 )
 
 // NewRoleControl returns a new instance of the Role controller
