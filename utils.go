@@ -13,14 +13,13 @@ import (
 	"github.com/gravitational/trace"
 
 	log "github.com/Sirupsen/logrus"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
 )
 
 type action string
@@ -98,7 +97,7 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 
 // CollectPods collects pods matched by fn
 func CollectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
-	fn func(api.ObjectReference) bool) (map[string]v1.Pod, error) {
+	fn func(v1.ObjectReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	for key, val := range matchLabels {
 		set[key] = val

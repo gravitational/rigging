@@ -18,13 +18,13 @@ import (
 	"io"
 
 	"github.com/gravitational/trace"
+	appsv1beta2 "k8s.io/api/apps/v1beta2"
+	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/api/rbac/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
-	batchv1 "k8s.io/client-go/pkg/apis/batch/v1"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/apis/rbac/v1alpha1"
 )
 
 type ResourceHeader struct {
@@ -43,11 +43,11 @@ func ParseResourceHeader(reader io.Reader) (*ResourceHeader, error) {
 }
 
 // ParseDaemonSet parses daemon set from reader
-func ParseDaemonSet(r io.Reader) (*v1beta1.DaemonSet, error) {
+func ParseDaemonSet(r io.Reader) (*appsv1beta2.DaemonSet, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
 	}
-	ds := v1beta1.DaemonSet{}
+	ds := appsv1beta2.DaemonSet{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ds)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -71,8 +71,8 @@ func ParseJob(r io.Reader) (*batchv1.Job, error) {
 
 // ParseSerializedReference parses serialized reference object
 // used in annotations
-func ParseSerializedReference(r io.Reader) (*api.SerializedReference, error) {
-	ref := api.SerializedReference{}
+func ParseSerializedReference(r io.Reader) (*v1.SerializedReference, error) {
+	ref := v1.SerializedReference{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ref)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -94,11 +94,11 @@ func ParseReplicationController(r io.Reader) (*v1.ReplicationController, error) 
 }
 
 // ParseDeployment parses deployment
-func ParseDeployment(r io.Reader) (*v1beta1.Deployment, error) {
+func ParseDeployment(r io.Reader) (*appsv1beta2.Deployment, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
 	}
-	rc := v1beta1.Deployment{}
+	rc := appsv1beta2.Deployment{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&rc)
 	if err != nil {
 		return nil, trace.Wrap(err)
