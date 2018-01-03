@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ import (
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	"k8s.io/api/extensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -73,7 +76,12 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		return nil, ConvertError(err)
 	}
 
-	cs := &Changeset{ChangesetConfig: config, client: clt}
+	apiclient, err := apiextensionsclientset.NewForConfig(&cfg)
+	if err != nil {
+		return nil, ConvertError(err)
+	}
+
+	cs := &Changeset{ChangesetConfig: config, client: clt, APIExtensionsClient: apiclient}
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -86,6 +94,8 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 type Changeset struct {
 	ChangesetConfig
 	client *rest.RESTClient
+	// APIExtensionsClient is a client for the extensions server
+	APIExtensionsClient *apiextensionsclientset.Clientset
 }
 
 // Upsert upserts resource in a context of a changeset
@@ -1548,16 +1558,62 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 
 func (cs *Changeset) Init(ctx context.Context) error {
 	log.Debug("changeset init")
-	tpr := &v1beta1.ThirdPartyResource{
+
+	version, err := cs.Client.ServerVersion()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	versionMajor, err := strconv.Atoi(version.Major)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	versionMinor, err := strconv.Atoi(version.Minor)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// TODO(knisbet) deprecated. Remove Third Party resources when we're no longer supporting kubernetes < 1.8
+	if versionMajor == 1 && versionMinor < 8 {
+		tpr := &v1beta1.ThirdPartyResource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ChangesetResourceName,
+			},
+			Versions: []v1beta1.APIVersion{
+				{Name: ChangesetVersion},
+			},
+			Description: "Changeset",
+		}
+		_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+		err = ConvertError(err)
+		if err != nil {
+			if !trace.IsAlreadyExists(err) {
+				return trace.Wrap(err)
+			}
+		}
+		// wait for the controller to init by trying to list stuff
+		return retry(ctx, 30, time.Second, func() error {
+			_, err := cs.list(DefaultNamespace)
+			return err
+		})
+	}
+	// kubernetes 1.8 or newer
+	crd := &apiextensions.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ChangesetResourceName,
 		},
-		Versions: []v1beta1.APIVersion{
-			{Name: ChangesetVersion},
+		Spec: apiextensions.CustomResourceDefinitionSpec{
+			Group:   ChangesetGroup,
+			Version: ChangesetVersion,
+			Scope:   ChangesetScope,
+			Names: apiextensions.CustomResourceDefinitionNames{
+				Kind:     KindChangeset,
+				Plural:   ChangesetPlural,
+				Singular: ChangesetSingular,
+			},
 		},
-		Description: "Changeset",
 	}
-	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+
+	_, err = cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {
@@ -1569,6 +1625,7 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		_, err := cs.list(DefaultNamespace)
 		return err
 	})
+
 }
 
 func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*ChangesetResource, error) {
