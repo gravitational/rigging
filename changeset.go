@@ -21,20 +21,23 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
+	"k8s.io/api/extensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
-	api "k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 )
 
@@ -65,7 +68,7 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		cfg.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
-	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
+	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
 	cfg.GroupVersion = &schema.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
 
 	clt, err := rest.RESTClientFor(&cfg)
@@ -73,7 +76,12 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		return nil, ConvertError(err)
 	}
 
-	cs := &Changeset{ChangesetConfig: config, client: clt}
+	apiclient, err := apiextensionsclientset.NewForConfig(&cfg)
+	if err != nil {
+		return nil, ConvertError(err)
+	}
+
+	cs := &Changeset{ChangesetConfig: config, client: clt, APIExtensionsClient: apiclient}
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -86,6 +94,8 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 type Changeset struct {
 	ChangesetConfig
 	client *rest.RESTClient
+	// APIExtensionsClient is a client for the extensions server
+	APIExtensionsClient *apiextensionsclientset.Clientset
 }
 
 // Upsert upserts resource in a context of a changeset
@@ -349,7 +359,7 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Extensions().DaemonSets(daemonset.Namespace).Get(daemonset.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Apps().DaemonSets(daemonset.Namespace).Get(daemonset.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -391,7 +401,8 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Core().ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
+
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -412,7 +423,7 @@ func (cs *Changeset) statusDeployment(ctx context.Context, data []byte, uid stri
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Extensions().Deployments(deployment.Namespace).Get(deployment.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Apps().Deployments(deployment.Namespace).Get(deployment.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -433,7 +444,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string)
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Core().Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -454,7 +465,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Core().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -475,7 +486,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Core().ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -496,7 +507,7 @@ func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
+		existing, err := cs.Client.Core().ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -641,7 +652,7 @@ func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, ob
 }
 
 func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	ds, err := cs.Client.Extensions().DaemonSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	ds, err := cs.Client.Apps().DaemonSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -683,7 +694,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 }
 
 func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	deployment, err := cs.Client.Extensions().Deployments(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	deployment, err := cs.Client.Apps().Deployments(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -1547,16 +1558,62 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 
 func (cs *Changeset) Init(ctx context.Context) error {
 	log.Debug("changeset init")
-	tpr := &v1beta1.ThirdPartyResource{
+
+	version, err := cs.Client.ServerVersion()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	versionMajor, err := strconv.Atoi(version.Major)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	versionMinor, err := strconv.Atoi(version.Minor)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// TODO(knisbet) deprecated. Remove Third Party resources when we're no longer supporting kubernetes < 1.8
+	if versionMajor == 1 && versionMinor < 8 {
+		tpr := &v1beta1.ThirdPartyResource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ChangesetResourceName,
+			},
+			Versions: []v1beta1.APIVersion{
+				{Name: ChangesetVersion},
+			},
+			Description: "Changeset",
+		}
+		_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+		err = ConvertError(err)
+		if err != nil {
+			if !trace.IsAlreadyExists(err) {
+				return trace.Wrap(err)
+			}
+		}
+		// wait for the controller to init by trying to list stuff
+		return retry(ctx, 30, time.Second, func() error {
+			_, err := cs.list(DefaultNamespace)
+			return err
+		})
+	}
+	// kubernetes 1.8 or newer
+	crd := &apiextensions.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ChangesetResourceName,
 		},
-		Versions: []v1beta1.APIVersion{
-			{Name: ChangesetVersion},
+		Spec: apiextensions.CustomResourceDefinitionSpec{
+			Group:   ChangesetGroup,
+			Version: ChangesetVersion,
+			Scope:   ChangesetScope,
+			Names: apiextensions.CustomResourceDefinitionNames{
+				Kind:     KindChangeset,
+				Plural:   ChangesetPlural,
+				Singular: ChangesetSingular,
+			},
 		},
-		Description: "Changeset",
 	}
-	_, err := cs.Client.Extensions().ThirdPartyResources().Create(tpr)
+
+	_, err = cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(crd)
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {
@@ -1568,6 +1625,7 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		_, err := cs.list(DefaultNamespace)
 		return err
 	})
+
 }
 
 func (cs *Changeset) Get(ctx context.Context, namespace, name string) (*ChangesetResource, error) {

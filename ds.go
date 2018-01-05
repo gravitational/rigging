@@ -20,12 +20,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
+	"k8s.io/api/apps/v1beta2"
+	"k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 // NewDSControl returns new instance of DaemonSet updater
@@ -34,7 +34,7 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var ds *v1beta1.DaemonSet
+	var ds *v1beta2.DaemonSet
 	if config.DaemonSet != nil {
 		ds = config.DaemonSet
 	} else {
@@ -59,7 +59,7 @@ type DSConfig struct {
 	// Reader with daemon set to update, will be used if present
 	Reader io.Reader
 	// DaemonSet is already parsed daemon set, will be used if present
-	DaemonSet *v1beta1.DaemonSet
+	DaemonSet *v1beta2.DaemonSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -78,7 +78,7 @@ func (c *DSConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type DSControl struct {
 	DSConfig
-	daemonSet v1beta1.DaemonSet
+	daemonSet v1beta2.DaemonSet
 	*log.Entry
 }
 
@@ -88,7 +88,7 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 	if daemonSet.Spec.Selector != nil {
 		labels = daemonSet.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref api.ObjectReference) bool {
+	pods, err := CollectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref v1.ObjectReference) bool {
 		return ref.Kind == KindDaemonSet && ref.UID == daemonSet.UID
 	})
 	return pods, trace.Wrap(err)
@@ -134,7 +134,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 func (c *DSControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.daemonSet.ObjectMeta))
 
-	daemons := c.Client.Extensions().DaemonSets(c.daemonSet.Namespace)
+	daemons := c.Client.Apps().DaemonSets(c.daemonSet.Namespace)
 	currentDS, err := daemons.Get(c.daemonSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {

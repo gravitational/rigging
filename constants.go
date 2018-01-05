@@ -8,10 +8,13 @@ import (
 )
 
 const (
-	ChangesetResourceName     = "changeset.changeset.gravitational.io"
+	ChangesetResourceName     = "changesets.changeset.gravitational.io"
 	ChangesetGroup            = "changeset.gravitational.io"
 	ChangesetVersion          = "v1"
 	ChangesetCollection       = "changesets"
+	ChangesetPlural           = "changesets"
+	ChangesetSingular         = "changeset"
+	ChangesetScope            = "Namespaced"
 	DefaultNamespace          = "default"
 	KindDaemonSet             = "DaemonSet"
 	KindChangeset             = "Changeset"
