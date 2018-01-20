@@ -22,7 +22,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/api/rbac/v1alpha1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -156,8 +156,8 @@ func ParseServiceAccount(r io.Reader) (*v1.ServiceAccount, error) {
 }
 
 // ParseRole parses an rbac role from the specified stream
-func ParseRole(r io.Reader) (*v1alpha1.Role, error) {
-	var role v1alpha1.Role
+func ParseRole(r io.Reader) (*rbacv1.Role, error) {
+	var role rbacv1.Role
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&role)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -166,8 +166,8 @@ func ParseRole(r io.Reader) (*v1alpha1.Role, error) {
 }
 
 // ParseClusterRole parses an rbac cluster role from the specified stream
-func ParseClusterRole(r io.Reader) (*v1alpha1.ClusterRole, error) {
-	var role v1alpha1.ClusterRole
+func ParseClusterRole(r io.Reader) (*rbacv1.ClusterRole, error) {
+	var role rbacv1.ClusterRole
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&role)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -176,8 +176,8 @@ func ParseClusterRole(r io.Reader) (*v1alpha1.ClusterRole, error) {
 }
 
 // ParseRoleBinding parses an rbac role binding from the specified stream
-func ParseRoleBinding(r io.Reader) (*v1alpha1.RoleBinding, error) {
-	var binding v1alpha1.RoleBinding
+func ParseRoleBinding(r io.Reader) (*rbacv1.RoleBinding, error) {
+	var binding rbacv1.RoleBinding
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&binding)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -186,8 +186,8 @@ func ParseRoleBinding(r io.Reader) (*v1alpha1.RoleBinding, error) {
 }
 
 // ParseClusterRoleBinding parses an rbac cluster role binding from the specified stream
-func ParseClusterRoleBinding(r io.Reader) (*v1alpha1.ClusterRoleBinding, error) {
-	var binding v1alpha1.ClusterRoleBinding
+func ParseClusterRoleBinding(r io.Reader) (*rbacv1.ClusterRoleBinding, error) {
+	var binding rbacv1.ClusterRoleBinding
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&binding)
 	if err != nil {
 		return nil, trace.Wrap(err)
