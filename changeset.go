@@ -528,7 +528,7 @@ func (cs *Changeset) statusRole(ctx context.Context, data []byte, uid string) er
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().Roles(role.Namespace).Get(role.Name, metav1.GetOptions{})
+		existing, err := cs.Client.RbacV1().Roles(role.Namespace).Get(role.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -549,7 +549,7 @@ func (cs *Changeset) statusClusterRole(ctx context.Context, data []byte, uid str
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(role.Name, metav1.GetOptions{})
+		existing, err := cs.Client.RbacV1().ClusterRoles().Get(role.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -570,7 +570,7 @@ func (cs *Changeset) statusRoleBinding(ctx context.Context, data []byte, uid str
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace).Get(binding.Name, metav1.GetOptions{})
+		existing, err := cs.Client.RbacV1().RoleBindings(binding.Namespace).Get(binding.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -591,7 +591,7 @@ func (cs *Changeset) statusClusterRoleBinding(ctx context.Context, data []byte, 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(binding.Name, metav1.GetOptions{})
+		existing, err := cs.Client.RbacV1().ClusterRoleBindings().Get(binding.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -764,7 +764,7 @@ func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetReso
 }
 
 func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	role, err := cs.Client.RbacV1alpha1().Roles(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	role, err := cs.Client.RbacV1().Roles(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -778,7 +778,7 @@ func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, name
 }
 
 func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	role, err := cs.Client.RbacV1alpha1().ClusterRoles().Get(name, metav1.GetOptions{})
+	role, err := cs.Client.RbacV1().ClusterRoles().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -792,7 +792,7 @@ func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResourc
 }
 
 func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	binding, err := cs.Client.RbacV1alpha1().RoleBindings(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	binding, err := cs.Client.RbacV1().RoleBindings(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -806,7 +806,7 @@ func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResourc
 }
 
 func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	binding, err := cs.Client.RbacV1alpha1().ClusterRoleBindings().Get(name, metav1.GetOptions{})
+	binding, err := cs.Client.RbacV1().ClusterRoleBindings().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -1367,7 +1367,7 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 		"cs":   tr.String(),
 		"role": formatMeta(role.ObjectMeta),
 	})
-	roles := cs.Client.RbacV1alpha1().Roles(role.Namespace)
+	roles := cs.Client.RbacV1().Roles(role.Namespace)
 	currentRole, err := roles.Get(role.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1395,7 +1395,7 @@ func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResourc
 		"cs":           tr.String(),
 		"cluster_role": formatMeta(role.ObjectMeta),
 	})
-	roles := cs.Client.RbacV1alpha1().ClusterRoles()
+	roles := cs.Client.RbacV1().ClusterRoles()
 	currentRole, err := roles.Get(role.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1423,7 +1423,7 @@ func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResourc
 		"cs":           tr.String(),
 		"role_binding": formatMeta(binding.ObjectMeta),
 	})
-	bindings := cs.Client.RbacV1alpha1().RoleBindings(binding.Namespace)
+	bindings := cs.Client.RbacV1().RoleBindings(binding.Namespace)
 	currentBinding, err := bindings.Get(binding.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1451,7 +1451,7 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 		"cs": tr.String(),
 		"cluster_role_binding": formatMeta(binding.ObjectMeta),
 	})
-	bindings := cs.Client.RbacV1alpha1().ClusterRoleBindings()
+	bindings := cs.Client.RbacV1().ClusterRoleBindings()
 	currentBinding, err := bindings.Get(binding.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
