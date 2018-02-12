@@ -85,7 +85,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = roles.Create(&c.Role)
-		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create role %q (%+v)", formatMeta(c.ObjectMeta), c.Role)
 	}
 	_, err = roles.Update(&c.Role)
 	return ConvertError(err)
