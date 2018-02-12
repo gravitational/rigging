@@ -19,7 +19,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/api/rbac/v1alpha1"
+	"k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -42,7 +42,7 @@ func NewRoleControl(config RoleConfig) (*RoleControl, error) {
 // RoleConfig defines controller configuration
 type RoleConfig struct {
 	// Role is the existing role
-	Role v1alpha1.Role
+	Role v1.Role
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -60,21 +60,21 @@ func (c *RoleConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type RoleControl struct {
 	RoleConfig
-	v1alpha1.Role
+	v1.Role
 	*log.Entry
 }
 
 func (c *RoleControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.RbacV1alpha1().Roles(c.Namespace).Delete(c.Name, nil)
+	err := c.Client.RbacV1().Roles(c.Namespace).Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *RoleControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	roles := c.Client.RbacV1alpha1().Roles(c.Namespace)
+	roles := c.Client.RbacV1().Roles(c.Namespace)
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
@@ -92,7 +92,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 }
 
 func (c *RoleControl) Status() error {
-	roles := c.Client.RbacV1alpha1().Roles(c.Namespace)
+	roles := c.Client.RbacV1().Roles(c.Namespace)
 	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
@@ -115,7 +115,7 @@ func NewClusterRoleControl(config ClusterRoleConfig) (*ClusterRoleControl, error
 // ClusterRoleConfig defines controller configuration
 type ClusterRoleConfig struct {
 	// Role is the existing cluster role
-	Role v1alpha1.ClusterRole
+	Role v1.ClusterRole
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -133,21 +133,21 @@ func (c *ClusterRoleConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type ClusterRoleControl struct {
 	ClusterRoleConfig
-	v1alpha1.ClusterRole
+	v1.ClusterRole
 	*log.Entry
 }
 
 func (c *ClusterRoleControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.RbacV1alpha1().ClusterRoles().Delete(c.Name, nil)
+	err := c.Client.RbacV1().ClusterRoles().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	roles := c.Client.RbacV1alpha1().ClusterRoles()
+	roles := c.Client.RbacV1().ClusterRoles()
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
@@ -165,7 +165,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 }
 
 func (c *ClusterRoleControl) Status() error {
-	roles := c.Client.RbacV1alpha1().ClusterRoles()
+	roles := c.Client.RbacV1().ClusterRoles()
 	_, err := roles.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
@@ -188,7 +188,7 @@ func NewRoleBindingControl(config RoleBindingConfig) (*RoleBindingControl, error
 // RoleBindingConfig defines controller configuration
 type RoleBindingConfig struct {
 	// RoleBinding is the existing role binding
-	Binding v1alpha1.RoleBinding
+	Binding v1.RoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -206,21 +206,21 @@ func (c *RoleBindingConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type RoleBindingControl struct {
 	RoleBindingConfig
-	v1alpha1.RoleBinding
+	v1.RoleBinding
 	*log.Entry
 }
 
 func (c *RoleBindingControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.RbacV1alpha1().RoleBindings(c.Namespace).Delete(c.Name, nil)
+	err := c.Client.RbacV1().RoleBindings(c.Namespace).Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	bindings := c.Client.RbacV1alpha1().RoleBindings(c.Namespace)
+	bindings := c.Client.RbacV1().RoleBindings(c.Namespace)
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
@@ -238,7 +238,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 }
 
 func (c *RoleBindingControl) Status() error {
-	bindings := c.Client.RbacV1alpha1().RoleBindings(c.Namespace)
+	bindings := c.Client.RbacV1().RoleBindings(c.Namespace)
 	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
@@ -261,7 +261,7 @@ func NewClusterRoleBindingControl(config ClusterRoleBindingConfig) (*ClusterRole
 // ClusterRoleBindingConfig defines controller configuration
 type ClusterRoleBindingConfig struct {
 	// Binding is the existing cluster role binding
-	Binding v1alpha1.ClusterRoleBinding
+	Binding v1.ClusterRoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -279,21 +279,21 @@ func (c *ClusterRoleBindingConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type ClusterRoleBindingControl struct {
 	ClusterRoleBindingConfig
-	v1alpha1.ClusterRoleBinding
+	v1.ClusterRoleBinding
 	*log.Entry
 }
 
 func (c *ClusterRoleBindingControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.RbacV1alpha1().ClusterRoleBindings().Delete(c.Name, nil)
+	err := c.Client.RbacV1().ClusterRoleBindings().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	bindings := c.Client.RbacV1alpha1().ClusterRoleBindings()
+	bindings := c.Client.RbacV1().ClusterRoleBindings()
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
@@ -311,7 +311,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 }
 
 func (c *ClusterRoleBindingControl) Status() error {
-	bindings := c.Client.RbacV1alpha1().ClusterRoleBindings()
+	bindings := c.Client.RbacV1().ClusterRoleBindings()
 	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
