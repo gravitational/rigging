@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -97,7 +96,7 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 
 // CollectPods collects pods matched by fn
 func CollectPods(namespace string, matchLabels map[string]string, entry *log.Entry, client *kubernetes.Clientset,
-	fn func(v1.ObjectReference) bool) (map[string]v1.Pod, error) {
+	fn func(metav1.OwnerReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	for key, val := range matchLabels {
 		set[key] = val
@@ -112,20 +111,11 @@ func CollectPods(namespace string, matchLabels map[string]string, entry *log.Ent
 
 	pods := make(map[string]v1.Pod, 0)
 	for _, pod := range podList.Items {
-		createdBy, exists := pod.Annotations[AnnotationCreatedBy]
-		if !exists {
-			continue
-		}
-
-		ref, err := ParseSerializedReference(strings.NewReader(createdBy))
-		if err != nil {
-			log.Warning(trace.DebugReport(err))
-			continue
-		}
-
-		if fn(ref.Reference) {
-			pods[pod.Spec.NodeName] = pod
-			entry.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta), pod.Spec.NodeName)
+		for _, ref := range pod.OwnerReferences {
+			if fn(ref) {
+				pods[pod.Spec.NodeName] = pod
+				entry.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta), pod.Spec.NodeName)
+			}
 		}
 	}
 	return pods, nil

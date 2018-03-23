@@ -183,7 +183,7 @@ func (c *DeploymentControl) collectPods(deployment *v1beta2.Deployment) (map[str
 	if deployment.Spec.Selector != nil {
 		labels = deployment.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(deployment.Namespace, labels, c.Entry, c.Client, func(ref v1.ObjectReference) bool {
+	pods, err := CollectPods(deployment.Namespace, labels, c.Entry, c.Client, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindDeployment && ref.UID == deployment.UID
 	})
 	return pods, ConvertError(err)

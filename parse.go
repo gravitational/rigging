@@ -69,17 +69,6 @@ func ParseJob(r io.Reader) (*batchv1.Job, error) {
 	return &job, nil
 }
 
-// ParseSerializedReference parses serialized reference object
-// used in annotations
-func ParseSerializedReference(r io.Reader) (*v1.SerializedReference, error) {
-	ref := v1.SerializedReference{}
-	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ref)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &ref, nil
-}
-
 // ParseReplicationController parses replication controller
 func ParseReplicationController(r io.Reader) (*v1.ReplicationController, error) {
 	if r == nil {

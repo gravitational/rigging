@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
@@ -87,32 +86,14 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 	for key, val := range c.replicationController.Spec.Selector {
 		set[key] = val
 	}
-	pods := c.Client.Core().Pods(replicationController.Namespace)
-	podList, err := pods.List(metav1.ListOptions{
-		LabelSelector: set.AsSelector().String(),
+	pods, err := CollectPods(replicationController.Namespace, set, c.Entry, c.Client, func(ref metav1.OwnerReference) bool {
+		return ref.Kind == KindReplicationController && ref.UID == replicationController.UID
 	})
-	if err != nil {
-		return nil, ConvertError(err)
+	var podList []v1.Pod
+	for _, pod := range pods {
+		podList = append(podList, pod)
 	}
-	c.Infof("collectPods(%v) -> %v", set, len(podList.Items))
-	currentPods := make([]v1.Pod, 0)
-	for _, pod := range podList.Items {
-		createdBy, ok := pod.Annotations[AnnotationCreatedBy]
-		if !ok {
-			continue
-		}
-		ref, err := ParseSerializedReference(strings.NewReader(createdBy))
-		if err != nil {
-			log.Warningf(trace.DebugReport(err))
-			continue
-		}
-		c.Infof("collectPods(%v, %v, %v)", ref.Reference.Kind, ref.Reference.UID, replicationController.UID)
-		if ref.Reference.Kind == KindReplicationController && ref.Reference.UID == replicationController.UID {
-			currentPods = append(currentPods, pod)
-			c.Infof("found pod created by this RC: %v", pod.Name)
-		}
-	}
-	return currentPods, nil
+	return podList, trace.Wrap(err)
 }
 
 func (c *RCControl) Delete(ctx context.Context, cascade bool) error {

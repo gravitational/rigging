@@ -88,7 +88,7 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 	if daemonSet.Spec.Selector != nil {
 		labels = daemonSet.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref v1.ObjectReference) bool {
+	pods, err := CollectPods(daemonSet.Namespace, labels, c.Entry, c.Client, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindDaemonSet && ref.UID == daemonSet.UID
 	})
 	return pods, trace.Wrap(err)

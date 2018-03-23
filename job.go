@@ -156,7 +156,7 @@ func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	if job.Spec.Selector != nil {
 		labels = job.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref v1.ObjectReference) bool {
+	pods, err := CollectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
 	return pods, ConvertError(err)
