@@ -32,7 +32,6 @@ const (
 	KindClusterRoleBinding    = "ClusterRoleBinding"
 	KindPodSecurityPolicy     = "PodSecurityPolicy"
 	ControllerUIDLabel        = "controller-uid"
-	AnnotationCreatedBy       = "kubernetes.io/created-by"
 	OpStatusCreated           = "created"
 	OpStatusCompleted         = "completed"
 	OpStatusReverted          = "reverted"
