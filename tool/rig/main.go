@@ -15,11 +15,11 @@ import (
 
 	"github.com/gravitational/rigging"
 
-	log "github.com/Sirupsen/logrus"
-	logrusSyslog "github.com/Sirupsen/logrus/hooks/syslog"
 	goyaml "github.com/ghodss/yaml"
 	yaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
+	log "github.com/sirupsen/logrus"
+	logrusSyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"gopkg.in/alecthomas/kingpin.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
