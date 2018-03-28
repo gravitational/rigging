@@ -18,7 +18,7 @@ import (
 	"io"
 
 	"github.com/gravitational/trace"
-	appsv1beta2 "k8s.io/api/apps/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -43,11 +43,11 @@ func ParseResourceHeader(reader io.Reader) (*ResourceHeader, error) {
 }
 
 // ParseDaemonSet parses daemon set from reader
-func ParseDaemonSet(r io.Reader) (*appsv1beta2.DaemonSet, error) {
+func ParseDaemonSet(r io.Reader) (*appsv1.DaemonSet, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
 	}
-	ds := appsv1beta2.DaemonSet{}
+	ds := appsv1.DaemonSet{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ds)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -83,11 +83,11 @@ func ParseReplicationController(r io.Reader) (*v1.ReplicationController, error) 
 }
 
 // ParseDeployment parses deployment
-func ParseDeployment(r io.Reader) (*appsv1beta2.Deployment, error) {
+func ParseDeployment(r io.Reader) (*appsv1.Deployment, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
 	}
-	rc := appsv1beta2.Deployment{}
+	rc := appsv1.Deployment{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&rc)
 	if err != nil {
 		return nil, trace.Wrap(err)
