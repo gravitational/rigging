@@ -47,7 +47,7 @@
   name = "k8s.io/apiextensions-apiserver"
 
 [[constraint]]
-  version = "5.0.0"
+  version = "6.0.0"
   name = "k8s.io/client-go"
 
 [[override]]
@@ -215,8 +215,8 @@ name = "gopkg.in/yaml.v2"
 revision = "53feefa2559fb8dfa8d81baad31be332c97d6c77"
 
 [[override]]
-name = "k8s.io/api"
-revision = "f63f838f2e6d362a1fd4a710ae13f603e4b51ea9"
+  name = "k8s.io/api"
+  branch = "release-1.9"
 
 [[override]]
 name = "k8s.io/apimachinery"
