@@ -20,13 +20,15 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
+[prune]
+  non-go = true
+  go-tests = true
+  unused-packages = true
+
 [[constraint]]
   name = "github.com/sirupsen/logrus"
   revision = "8ab1e1b91d5f1a6124287906f8b0402844d3a2b3"
   source = "github.com/gravitational/logrus"
-
-[[constraint]]
-  name = "github.com/ghodss/yaml"
 
 [[constraint]]
   name = "github.com/gravitational/trace"
