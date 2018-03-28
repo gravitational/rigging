@@ -21,7 +21,7 @@
 #  version = "2.4.0"
 
 [[constraint]]
-  name = "github.com/Sirupsen/logrus"
+  name = "github.com/sirupsen/logrus"
   revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
   source = "github.com/gravitational/logrus"
 
