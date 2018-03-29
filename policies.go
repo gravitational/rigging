@@ -17,8 +17,8 @@ package rigging
 import (
 	"context"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/gravitational/trace"
-	log "github.com/sirupsen/logrus"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
