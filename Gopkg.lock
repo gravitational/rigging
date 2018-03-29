@@ -292,7 +292,7 @@
   revision = "c6c40fa5f71e46739e69d43b8ce08fad9720bab9"
 
 [[projects]]
-  branch = "release-1.8"
+  branch = "release-1.9"
   name = "k8s.io/apiextensions-apiserver"
   packages = [
     "pkg/apis/apiextensions",
@@ -301,7 +301,7 @@
     "pkg/client/clientset/clientset/scheme",
     "pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
   ]
-  revision = "0a471c1e290a46169d7604450c36d573f31b8965"
+  revision = "e2ae4843c087434b059aa70bb4d620c415643b86"
 
 [[projects]]
   name = "k8s.io/apimachinery"
@@ -408,6 +408,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d4321a18805a09db68b3a808926e8527a88801b3b1b819a982128cb958ce27fd"
+  inputs-digest = "235960e8c1a943ac53890ca8e748e68f92a59dfe7cb271bda8c65d3b63aaf50e"
   solver-name = "gps-cdcl"
   solver-version = 1

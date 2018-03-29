@@ -35,12 +35,16 @@
   branch = "master"
 
 [[constraint]]
-  branch = "release-1.7"
-  name = "k8s.io/apimachinery"
-
-[[constraint]]
-  branch = "release-1.8"
+  branch = "release-1.9"
   name = "k8s.io/apiextensions-apiserver"
+
+[[override]]
+  name = "k8s.io/api"
+  branch = "release-1.9"
+
+[[override]]
+  name = "k8s.io/apimachinery"
+  revision = "5134afd2c0c91158afac0d8a28bd2177185a3bcc"
 
 [[constraint]]
   version = "6.0.0"
@@ -209,14 +213,6 @@ revision = "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
 [[override]]
 name = "gopkg.in/yaml.v2"
 revision = "53feefa2559fb8dfa8d81baad31be332c97d6c77"
-
-[[override]]
-  name = "k8s.io/api"
-  branch = "release-1.9"
-
-[[override]]
-name = "k8s.io/apimachinery"
-revision = "5134afd2c0c91158afac0d8a28bd2177185a3bcc"
 
 [[override]]
 name = "k8s.io/kube-openapi"
