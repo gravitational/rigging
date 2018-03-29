@@ -20,23 +20,19 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
-[[constraint]]
-  name = "github.com/Sirupsen/logrus"
-  revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
-  source = "github.com/gravitational/logrus"
+[prune]
+  unused-packages = true
+  go-tests = true
 
 [[constraint]]
-  name = "github.com/ghodss/yaml"
+  name = "github.com/sirupsen/logrus"
+  revision = "8ab1e1b91d5f1a6124287906f8b0402844d3a2b3"
+  source = "github.com/gravitational/logrus"
+
 
 [[constraint]]
   name = "github.com/gravitational/trace"
-  revision = "a81b26cd14cab7e5045b9391fe77662c00a7e438"
-
-[[constraint]]
-  name = "gopkg.in/alecthomas/kingpin.v2"
-
-[[constraint]]
-  name = "gopkg.in/check.v1"
+  branch = "master"
 
 [[constraint]]
   branch = "release-1.7"

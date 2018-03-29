@@ -18,7 +18,7 @@ import (
 	"context"
 	"io"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/gravitational/trace"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"

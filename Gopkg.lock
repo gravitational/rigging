@@ -12,15 +12,6 @@
   revision = "5bd2802263f21d8788851d5305584c82a5c75d7e"
 
 [[projects]]
-  name = "github.com/Sirupsen/logrus"
-  packages = [
-    ".",
-    "hooks/syslog"
-  ]
-  revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
-  source = "github.com/gravitational/logrus"
-
-[[projects]]
   branch = "master"
   name = "github.com/alecthomas/template"
   packages = [
@@ -121,7 +112,8 @@
 [[projects]]
   name = "github.com/gravitational/trace"
   packages = ["."]
-  revision = "a81b26cd14cab7e5045b9391fe77662c00a7e438"
+  revision = "792b9868cdf9d499e09b47f167c553e786a0e235"
+  version = "1.1.4"
 
 [[projects]]
   name = "github.com/gregjones/httpcache"
@@ -181,6 +173,15 @@
   name = "github.com/peterbourgon/diskv"
   packages = ["."]
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
+
+[[projects]]
+  name = "github.com/sirupsen/logrus"
+  packages = [
+    ".",
+    "hooks/syslog"
+  ]
+  revision = "8ab1e1b91d5f1a6124287906f8b0402844d3a2b3"
+  source = "github.com/gravitational/logrus"
 
 [[projects]]
   name = "github.com/spf13/pflag"
@@ -300,7 +301,7 @@
     "pkg/client/clientset/clientset/scheme",
     "pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
   ]
-  revision = "996a70a27a0dcf53642ca52601b9107cb2ad810a"
+  revision = "0a471c1e290a46169d7604450c36d573f31b8965"
 
 [[projects]]
   name = "k8s.io/apimachinery"
@@ -407,6 +408,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "13503c12f37b289742e9fa550af4ce180843dba5b4c4e2f49622334ea847ba2d"
+  inputs-digest = "d4321a18805a09db68b3a808926e8527a88801b3b1b819a982128cb958ce27fd"
   solver-name = "gps-cdcl"
   solver-version = 1
