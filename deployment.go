@@ -18,9 +18,9 @@ import (
 	"context"
 	"io"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/api/apps/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -33,7 +33,7 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var rc *v1beta2.Deployment
+	var rc *appsv1.Deployment
 	if config.Deployment != nil {
 		rc = config.Deployment
 	} else {
@@ -57,7 +57,7 @@ type DeploymentConfig struct {
 	// Reader with deployment to update, will be used if present
 	Reader io.Reader
 	// Deployment is already parsed deployment, will be used if present
-	Deployment *v1beta2.Deployment
+	Deployment *appsv1.Deployment
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -76,7 +76,7 @@ func (c *DeploymentConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type DeploymentControl struct {
 	DeploymentConfig
-	deployment v1beta2.Deployment
+	deployment appsv1.Deployment
 	*log.Entry
 }
 
@@ -178,7 +178,7 @@ func (c *DeploymentControl) Status() error {
 	return nil
 }
 
-func (c *DeploymentControl) collectPods(deployment *v1beta2.Deployment) (map[string]v1.Pod, error) {
+func (c *DeploymentControl) collectPods(deployment *appsv1.Deployment) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if deployment.Spec.Selector != nil {
 		labels = deployment.Spec.Selector.MatchLabels

@@ -18,9 +18,9 @@ import (
 	"context"
 	"io"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/gravitational/trace"
-	"k8s.io/api/apps/v1beta2"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +34,7 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var ds *v1beta2.DaemonSet
+	var ds *appsv1.DaemonSet
 	if config.DaemonSet != nil {
 		ds = config.DaemonSet
 	} else {
@@ -59,7 +59,7 @@ type DSConfig struct {
 	// Reader with daemon set to update, will be used if present
 	Reader io.Reader
 	// DaemonSet is already parsed daemon set, will be used if present
-	DaemonSet *v1beta2.DaemonSet
+	DaemonSet *appsv1.DaemonSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -78,7 +78,7 @@ func (c *DSConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type DSControl struct {
 	DSConfig
-	daemonSet v1beta2.DaemonSet
+	daemonSet appsv1.DaemonSet
 	*log.Entry
 }
 

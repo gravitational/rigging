@@ -20,34 +20,33 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
-[[constraint]]
-  name = "github.com/Sirupsen/logrus"
-  revision = "8fcafe25b7418beae1d0e6875bde08c6411e8960"
-  source = "github.com/gravitational/logrus"
+[prune]
+  unused-packages = true
+  go-tests = true
 
 [[constraint]]
-  name = "github.com/ghodss/yaml"
+  name = "github.com/sirupsen/logrus"
+  source = "github.com/gravitational/logrus"
+  version = "1.0.6"
 
 [[constraint]]
   name = "github.com/gravitational/trace"
-  revision = "a81b26cd14cab7e5045b9391fe77662c00a7e438"
+  branch = "master"
 
 [[constraint]]
-  name = "gopkg.in/alecthomas/kingpin.v2"
-
-[[constraint]]
-  name = "gopkg.in/check.v1"
-
-[[constraint]]
-  branch = "release-1.7"
-  name = "k8s.io/apimachinery"
-
-[[constraint]]
-  branch = "release-1.8"
+  branch = "release-1.9"
   name = "k8s.io/apiextensions-apiserver"
 
+[[override]]
+  name = "k8s.io/api"
+  branch = "release-1.9"
+
+[[override]]
+  name = "k8s.io/apimachinery"
+  branch = "release-1.9"
+
 [[constraint]]
-  version = "5.0.0"
+  version = "6.0.0"
   name = "k8s.io/client-go"
 
 [[override]]
@@ -213,14 +212,6 @@ revision = "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
 [[override]]
 name = "gopkg.in/yaml.v2"
 revision = "53feefa2559fb8dfa8d81baad31be332c97d6c77"
-
-[[override]]
-name = "k8s.io/api"
-revision = "f63f838f2e6d362a1fd4a710ae13f603e4b51ea9"
-
-[[override]]
-name = "k8s.io/apimachinery"
-revision = "5134afd2c0c91158afac0d8a28bd2177185a3bcc"
 
 [[override]]
 name = "k8s.io/kube-openapi"
