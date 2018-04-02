@@ -24,9 +24,11 @@
   unused-packages = true
   go-tests = true
 
-  [[constraint]]
-    name = "github.com/sirupsen/logrus"
-    version = "1.0.5"
+[[constraint]]
+  name = "github.com/sirupsen/logrus"
+  source = "github.com/gravitational/logrus"
+  #version = "1.0.2"
+  branch = "dmitri/update"
 
 
 [[constraint]]
