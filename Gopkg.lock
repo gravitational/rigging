@@ -305,9 +305,9 @@
   revision = "ed51e547bbfe4b39e84eef9f98d946ac913449eb"
 
 [[projects]]
+  branch = "release-1.9"
   name = "k8s.io/apimachinery"
   packages = [
-    "pkg/api/equality",
     "pkg/api/errors",
     "pkg/api/meta",
     "pkg/api/resource",
@@ -316,7 +316,6 @@
     "pkg/apis/meta/v1alpha1",
     "pkg/conversion",
     "pkg/conversion/queryparams",
-    "pkg/conversion/unstructured",
     "pkg/fields",
     "pkg/labels",
     "pkg/runtime",
@@ -330,7 +329,6 @@
     "pkg/selection",
     "pkg/types",
     "pkg/util/clock",
-    "pkg/util/diff",
     "pkg/util/errors",
     "pkg/util/framer",
     "pkg/util/intstr",
@@ -346,7 +344,7 @@
     "pkg/watch",
     "third_party/forked/golang/reflect"
   ]
-  revision = "5134afd2c0c91158afac0d8a28bd2177185a3bcc"
+  revision = "cb88e003047fb517f284ff8af294451b20f0b403"
 
 [[projects]]
   name = "k8s.io/client-go"
@@ -409,6 +407,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "dd8b4a9cab9eb3e2ae8dcc3f387d092bb3e78d303fae4d346bed293717232642"
+  inputs-digest = "3d002968ed516610458c90b38db9e4a9783c33162e7ce16e9c4408907c029576"
   solver-name = "gps-cdcl"
   solver-version = 1
