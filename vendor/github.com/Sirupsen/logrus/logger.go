@@ -34,7 +34,7 @@ type Logger struct {
 }
 
 type MutexWrap struct {
-	lock     sync.Mutex
+	lock     sync.RWMutex
 	disabled bool
 }
 
@@ -44,9 +44,21 @@ func (mw *MutexWrap) Lock() {
 	}
 }
 
+func (mw *MutexWrap) RLock() {
+	if !mw.disabled {
+		mw.lock.RLock()
+	}
+}
+
 func (mw *MutexWrap) Unlock() {
 	if !mw.disabled {
 		mw.lock.Unlock()
+	}
+}
+
+func (mw *MutexWrap) RUnlock() {
+	if !mw.disabled {
+		mw.lock.RUnlock()
 	}
 }
 
@@ -310,9 +322,9 @@ func (logger *Logger) SetNoLock() {
 
 func (logger *Logger) GetHooks() LevelHooks {
 	var hooks LevelHooks
-	logger.mu.Lock()
+	logger.mu.RLock()
 	hooks = logger.Hooks
-	logger.mu.Unlock()
+	logger.mu.RUnlock()
 	return hooks
 }
 
