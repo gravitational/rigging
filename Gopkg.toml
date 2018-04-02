@@ -42,6 +42,7 @@
   name = "k8s.io/api"
   branch = "release-1.9"
 
+# TODO(knisbet) swap to branch release-1.9 when upstream resolved the mismatch
 [[override]]
   name = "k8s.io/apimachinery"
   revision = "5134afd2c0c91158afac0d8a28bd2177185a3bcc"
