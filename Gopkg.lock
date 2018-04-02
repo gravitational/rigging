@@ -175,13 +175,14 @@
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
 
 [[projects]]
+  branch = "dmitri/update"
   name = "github.com/sirupsen/logrus"
   packages = [
     ".",
     "hooks/syslog"
   ]
-  revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
-  version = "v1.0.5"
+  revision = "dbfd98a0a4fc4fc681b70c1231fb2ad3d189dbd2"
+  source = "github.com/gravitational/logrus"
 
 [[projects]]
   name = "github.com/spf13/pflag"
@@ -408,6 +409,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "9d6636e6f56dc69fe1b317aba68df00e7224e34babd6b85309f24e5d5f648a55"
+  inputs-digest = "e151054af20d83e543a11c7a0e624eb446d4aae67bda9352f40b827860aed541"
   solver-name = "gps-cdcl"
   solver-version = 1
