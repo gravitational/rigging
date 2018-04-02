@@ -180,8 +180,8 @@
     ".",
     "hooks/syslog"
   ]
-  revision = "8ab1e1b91d5f1a6124287906f8b0402844d3a2b3"
-  source = "github.com/gravitational/logrus"
+  revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
+  version = "v1.0.5"
 
 [[projects]]
   name = "github.com/spf13/pflag"
@@ -301,7 +301,7 @@
     "pkg/client/clientset/clientset/scheme",
     "pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
   ]
-  revision = "e2ae4843c087434b059aa70bb4d620c415643b86"
+  revision = "ed51e547bbfe4b39e84eef9f98d946ac913449eb"
 
 [[projects]]
   name = "k8s.io/apimachinery"
@@ -408,6 +408,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "235960e8c1a943ac53890ca8e748e68f92a59dfe7cb271bda8c65d3b63aaf50e"
+  inputs-digest = "9d6636e6f56dc69fe1b317aba68df00e7224e34babd6b85309f24e5d5f648a55"
   solver-name = "gps-cdcl"
   solver-version = 1
