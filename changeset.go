@@ -871,7 +871,12 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated daemon set, so we create a new version
 	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -898,7 +903,12 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 
 	if len(item.From) == 0 {
 		// this operation created the job, so we will delete it
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated the job, so we create a new version
 	return control.Upsert(ctx)
@@ -911,7 +921,12 @@ func (cs *Changeset) revertRC(ctx context.Context, item *ChangesetItem) error {
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated RC, so we create a new version
 	control, err := NewRCControl(RCConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -928,7 +943,12 @@ func (cs *Changeset) revertDeployment(ctx context.Context, item *ChangesetItem) 
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated Deployment, so we create a new version
 	control, err := NewDeploymentControl(DeploymentConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -945,7 +965,12 @@ func (cs *Changeset) revertService(ctx context.Context, item *ChangesetItem) err
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated Service, so we create a new version
 	control, err := NewServiceControl(ServiceConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -962,7 +987,12 @@ func (cs *Changeset) revertConfigMap(ctx context.Context, item *ChangesetItem) e
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated ConfigMap, so we create a new version
 	control, err := NewConfigMapControl(ConfigMapConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -979,7 +1009,12 @@ func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) erro
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	// this operation either created or updated Secret, so we create a new version
 	control, err := NewSecretControl(SecretConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
@@ -1000,7 +1035,12 @@ func (cs *Changeset) revertServiceAccount(ctx context.Context, item *ChangesetIt
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
@@ -1027,7 +1067,12 @@ func (cs *Changeset) revertRole(ctx context.Context, item *ChangesetItem) error 
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
@@ -1054,7 +1099,12 @@ func (cs *Changeset) revertClusterRole(ctx context.Context, item *ChangesetItem)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
@@ -1081,7 +1131,12 @@ func (cs *Changeset) revertRoleBinding(ctx context.Context, item *ChangesetItem)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
@@ -1108,7 +1163,12 @@ func (cs *Changeset) revertClusterRoleBinding(ctx context.Context, item *Changes
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
@@ -1135,7 +1195,12 @@ func (cs *Changeset) revertPodSecurityPolicy(ctx context.Context, item *Changese
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		return control.Delete(ctx, true)
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	// this operation either created or updated the resource, so we create a new version
