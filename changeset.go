@@ -933,7 +933,12 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 func (cs *Changeset) revertStatefulSet(ctx context.Context, item *ChangesetItem) error {
 	// this operation created statefulset, so we will delete it
 	if len(item.From) == 0 {
-		control, err := NewStatefulSetControl(StatefulSetConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
+		statefulSet, err := ParseStatefulSet(strings.NewReader(item.To))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -945,7 +950,12 @@ func (cs *Changeset) revertStatefulSet(ctx context.Context, item *ChangesetItem)
 		return err
 	}
 	// this operation either created or updated statefulset, so we create a new version
-	control, err := NewStatefulSetControl(StatefulSetConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	statefulSet, err := ParseStatefulSet(strings.NewReader(item.From))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}

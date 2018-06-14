@@ -18,7 +18,6 @@ package rigging
 
 import (
 	"context"
-	"io"
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
@@ -29,36 +28,26 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// NewStatefulSetControl return new instance of StatefulSet updater
+// NewStatefulSetControl returns new instance of the StatefulSet controller
 func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error) {
 	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var ss *appsv1.StatefulSet
-	if config.StatefulSet != nil {
-		ss = config.StatefulSet
-	} else {
-		ss, err = ParseStatefulSet(config.Reader)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
 
-	ss.Kind = KindStatefulSet
+	var statefulSet *appsv1.StatefulSet
+	statefulSet.Kind = KindStatefulSet
 	return &StatefulSetControl{
 		StatefulSetConfig: config,
-		statefulSet:       *ss,
+		statefulSet:       *statefulSet,
 		Entry: log.WithFields(log.Fields{
-			"statefulset": formatMeta(ss.ObjectMeta),
+			"statefulset": formatMeta(statefulSet.ObjectMeta),
 		}),
 	}, nil
 }
 
 // StatefulSetConfig is a StatefulSet control configuration
 type StatefulSetConfig struct {
-	// Reader with statefulset to update, will be used if present
-	Reader io.Reader
 	// StatefulSet is already parsed statefulset, will be used if present
 	StatefulSet *appsv1.StatefulSet
 	// Client is k8s client
@@ -68,8 +57,8 @@ type StatefulSetConfig struct {
 // CheckAndSetDefaults validates this configuration object and sets defaults
 func (c *StatefulSetConfig) CheckAndSetDefaults() error {
 	var errors []error
-	if c.Reader == nil && c.StatefulSet == nil {
-		errors = append(errors, trace.BadParameter("missing parameter Reader or StatefulSet"))
+	if c.StatefulSet == nil {
+		errors = append(errors, trace.BadParameter("missing parameter StatefulSet"))
 	}
 	if c.Client == nil {
 		errors = append(errors, trace.BadParameter("missing parameter Client"))
@@ -85,22 +74,22 @@ type StatefulSetControl struct {
 	*log.Entry
 }
 
-// Upsert creates or updates resource
+// Upsert creates or updates a statefulset resource
 func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.Infof("Upsert %v", formatMeta(c.StatefulSet.ObjectMeta))
 
-	statefulsets := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentSS, err := statefulsets.Get(c.statefulSet.Name, metav1.GetOptions{})
+	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		currentSS = nil
+		currentResource = nil
 	}
 
-	if currentSS != nil {
-		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: currentSS, Client: c.Client})
+	if currentResource != nil {
+		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: currentResource, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -111,13 +100,13 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 		}
 	}
 
-	c.Info("Creating new statefulset")
+	c.Info("Creating new statefulset.")
 	c.statefulSet.UID = ""
 	c.statefulSet.SelfLink = ""
 	c.statefulSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = statefulsets.Create(&c.statefulSet)
+		_, err = statefulset.Create(&c.statefulSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -136,25 +125,25 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 	return pods, trace.Wrap(err)
 }
 
-// Delete deletes resource
+// Delete deletes this statefulset resource
 func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Deleting %v", formatMeta(c.statefulSet.ObjectMeta))
+	c.Infof("Deleting statefulset %v.", formatMeta(c.statefulSet.ObjectMeta))
 
-	statefulsets := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentSS, err := statefulsets.Get(c.statefulSet.Name, metav1.GetOptions{})
+	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		return ConvertError(err)
 	}
 	pods := c.Client.CoreV1().Pods(c.statefulSet.Namespace)
-	currentPods, err := c.collectPods(currentSS)
+	currentPods, err := c.collectPods(currentResource)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	c.Info("Deleting current statefulset")
+	c.Infof("Deleting current statefulset %v.", formatMeta(currentResource.ObjectMeta))
 	deletePolicy := metav1.DeletePropagationForeground
-	err = statefulsets.Delete(c.statefulSet.Name, &metav1.DeleteOptions{
+	err = statefulset.Delete(c.statefulSet.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
 	if err != nil {
@@ -162,7 +151,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	err = waitForObjectDeletion(func() error {
-		_, err := statefulsets.Get(c.statefulSet.Name, metav1.GetOptions{})
+		_, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
 	if err != nil {
@@ -170,7 +159,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	if !cascade {
-		c.Info("Cascade not set, returning")
+		c.Debug("Cascade not set, returning.")
 	}
 	err = deletePods(pods, currentPods, *c.Entry)
 	return trace.Wrap(err)
@@ -186,12 +175,12 @@ func (c *StatefulSetControl) nodeSelector() labels.Selector {
 
 // Status returns status of pods for this resource
 func (c *StatefulSetControl) Status() error {
-	statefulsets := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentSS, err := statefulsets.Get(c.statefulSet.Name, metav1.GetOptions{})
+	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
-	currentPods, err := c.collectPods(currentSS)
+	currentPods, err := c.collectPods(currentResource)
 	if err != nil {
 		return trace.Wrap(err)
 	}
