@@ -131,7 +131,7 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 		labels = statefulSet.Spec.Selector.MatchLabels
 	}
 	pods, err := CollectPods(statefulSet.Namespace, labels, c.Entry, c.Client, func(ref metav1.OwnerReference) bool {
-		return ref.Kind == KindDaemonSet && ref.UID == statefulSet.UID
+		return ref.Kind == KindStatefulSet && ref.UID == statefulSet.UID
 	})
 	return pods, trace.Wrap(err)
 }
