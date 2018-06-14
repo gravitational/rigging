@@ -17,6 +17,7 @@ const (
 	ChangesetScope            = "Namespaced"
 	DefaultNamespace          = "default"
 	KindDaemonSet             = "DaemonSet"
+	KindStatefulSet           = "StatefulSet"
 	KindChangeset             = "Changeset"
 	KindConfigMap             = "ConfigMap"
 	KindDeployment            = "Deployment"
