@@ -55,6 +55,19 @@ func ParseDaemonSet(r io.Reader) (*appsv1.DaemonSet, error) {
 	return &ds, nil
 }
 
+// ParseStatefulSet parses statefulset resource from reader
+func ParseStatefulSet(r io.Reader) (*appsv1.StatefulSet, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	ss := appsv1.StatefulSet{}
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&ss)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &ss, nil
+}
+
 // ParseJob parses the specified reader as a Job resource
 func ParseJob(r io.Reader) (*batchv1.Job, error) {
 	if r == nil {

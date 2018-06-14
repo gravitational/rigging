@@ -134,6 +134,8 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertJob(ctx, tr, data)
 	case KindDaemonSet:
 		_, err = cs.upsertDaemonSet(ctx, tr, data)
+	case KindStatefulSet:
+		_, err = cs.upsertStatefulSet(ctx, tr, data)
 	case KindReplicationController:
 		_, err = cs.upsertRC(ctx, tr, data)
 	case KindDeployment:
@@ -228,10 +230,12 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 	log := log.WithFields(log.Fields{
 		"cs": tr.String(),
 	})
-	log.Infof("deleting %v/%s", resourceNamespace, resource)
+	log.Infof("Deleting %v/%s", resourceNamespace, resource)
 	switch resource.Kind {
 	case KindDaemonSet:
 		return cs.deleteDaemonSet(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindStatefulSet:
+		return cs.deleteStatefulSet(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindJob:
 		return cs.deleteJob(ctx, tr, resourceNamespace, resource.Name, cascade)
 	case KindReplicationController:
@@ -323,6 +327,8 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 	switch header.Kind {
 	case KindDaemonSet:
 		return cs.statusDaemonSet(ctx, data, uid)
+	case KindStatefulSet:
+		return cs.statusStatefulSet(ctx, data, uid)
 	case KindJob:
 		return cs.statusJob(ctx, data, uid)
 	case KindReplicationController:
@@ -366,6 +372,27 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 		}
 	}
 	control, err := NewDSControl(DSConfig{DaemonSet: daemonset, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusStatefulSet(ctx context.Context, data []byte, uid string) error {
+	ss, err := ParseStatefulSet(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.AppsV1().StatefulSets(ss.Namespace).Get(ss.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("statefulset with UID %v not found", uid)
+		}
+	}
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: ss, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -663,6 +690,21 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 	})
 }
 
+func (cs *Changeset) deleteStatefulSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	ss, err := cs.Client.AppsV1().StatefulSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: ss, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	return cs.withDeleteOp(ctx, tr, ss, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -836,6 +878,8 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 	switch info.Kind() {
 	case KindDaemonSet:
 		return cs.revertDaemonSet(ctx, item)
+	case KindStatefulSet:
+		return cs.revertStatefulSet(ctx, item)
 	case KindJob:
 		return cs.revertJob(ctx, item)
 	case KindReplicationController:
@@ -880,6 +924,28 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 	}
 	// this operation either created or updated daemon set, so we create a new version
 	control, err := NewDSControl(DSConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertStatefulSet(ctx context.Context, item *ChangesetItem) error {
+	// this operation created statefulset, so we will delete it
+	if len(item.From) == 0 {
+		control, err := NewStatefulSetControl(StatefulSetConfig{Reader: strings.NewReader(item.To), Client: cs.Client})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	// this operation either created or updated statefulset, so we create a new version
+	control, err := NewStatefulSetControl(StatefulSetConfig{Reader: strings.NewReader(item.From), Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1287,7 +1353,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		"ds": fmt.Sprintf("%v/%v", ds.Namespace, ds.Name),
 	})
 	log.Infof("upsert daemon set %v", formatMeta(ds.ObjectMeta))
-	daemons := cs.Client.Extensions().DaemonSets(ds.Namespace)
+	daemons := cs.Client.AppsV1().DaemonSets(ds.Namespace)
 	currentDS, err := daemons.Get(ds.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1302,6 +1368,36 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		return nil, trace.Wrap(err)
 	}
 	return cs.withUpsertOp(ctx, tr, currentDS, ds, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertStatefulSet(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	ss, err := ParseStatefulSet(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":          tr.String(),
+		"statefulset": fmt.Sprintf("%v/%v", ss.Namespace, ss.Name),
+	})
+	log.Infof("upsert statefulset %v", formatMeta(ss.ObjectMeta))
+	statefulsets := cs.Client.AppsV1().StatefulSets(ss.Namespace)
+	currentSS, err := statefulsets.Get(ss.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing statefulset not found")
+		currentSS = nil
+	}
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: ss, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return cs.withUpsertOp(ctx, tr, currentSS, ss, func() error {
 		return control.Upsert(ctx)
 	})
 }
