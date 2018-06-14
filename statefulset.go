@@ -78,8 +78,8 @@ type StatefulSetControl struct {
 func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.Infof("Upsert %v", formatMeta(c.StatefulSet.ObjectMeta))
 
-	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := collection.Get(c.statefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -106,7 +106,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.statefulSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = statefulset.Create(&c.statefulSet)
+		_, err = collection.Create(&c.statefulSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -129,8 +129,8 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("Deleting statefulset %v.", formatMeta(c.statefulSet.ObjectMeta))
 
-	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := collection.Get(c.statefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		return ConvertError(err)
@@ -143,7 +143,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 
 	c.Infof("Deleting current statefulset %v.", formatMeta(currentResource.ObjectMeta))
 	deletePolicy := metav1.DeletePropagationForeground
-	err = statefulset.Delete(c.statefulSet.Name, &metav1.DeleteOptions{
+	err = collection.Delete(c.statefulSet.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
 	if err != nil {
@@ -151,7 +151,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	err = waitForObjectDeletion(func() error {
-		_, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
+		_, err := collection.Get(c.statefulSet.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
 	if err != nil {
@@ -175,8 +175,8 @@ func (c *StatefulSetControl) nodeSelector() labels.Selector {
 
 // Status returns status of pods for this resource
 func (c *StatefulSetControl) Status() error {
-	statefulset := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
-	currentResource, err := statefulset.Get(c.statefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.statefulSet.Namespace)
+	currentResource, err := collection.Get(c.statefulSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
