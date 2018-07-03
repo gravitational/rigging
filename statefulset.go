@@ -45,8 +45,8 @@ func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error
 
 // StatefulSetConfig is a StatefulSet control configuration
 type StatefulSetConfig struct {
-	// StatefulSet is already parsed statefulset, will be used if present
-	StatefulSet *appsv1.StatefulSet
+	// StatefulSet is already parsed statefulset
+	*appsv1.StatefulSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -74,8 +74,8 @@ type StatefulSetControl struct {
 func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.Infof("Upsert %v", formatMeta(c.StatefulSet.ObjectMeta))
 
-	collection := c.Client.AppsV1().StatefulSets(c.StatefulSetConfig.StatefulSet.Namespace)
-	currentResource, err := collection.Get(c.StatefulSetConfig.StatefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.StatefulSet.Namespace)
+	currentResource, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -97,12 +97,12 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	}
 
 	c.Info("Creating new statefulset.")
-	c.StatefulSetConfig.StatefulSet.UID = ""
-	c.StatefulSetConfig.StatefulSet.SelfLink = ""
-	c.StatefulSetConfig.StatefulSet.ResourceVersion = ""
+	c.StatefulSet.UID = ""
+	c.StatefulSet.SelfLink = ""
+	c.StatefulSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = collection.Create(c.StatefulSetConfig.StatefulSet)
+		_, err = collection.Create(c.StatefulSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -123,15 +123,15 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 
 // Delete deletes this statefulset resource
 func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Deleting statefulset %v.", formatMeta(c.StatefulSetConfig.StatefulSet.ObjectMeta))
+	c.Infof("Deleting statefulset %v.", formatMeta(c.StatefulSet.ObjectMeta))
 
-	collection := c.Client.AppsV1().StatefulSets(c.StatefulSetConfig.StatefulSet.Namespace)
-	currentResource, err := collection.Get(c.StatefulSetConfig.StatefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.StatefulSet.Namespace)
+	currentResource, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		return ConvertError(err)
 	}
-	pods := c.Client.CoreV1().Pods(c.StatefulSetConfig.StatefulSet.Namespace)
+	pods := c.Client.CoreV1().Pods(c.StatefulSet.Namespace)
 	currentPods, err := c.collectPods(currentResource)
 	if err != nil {
 		return trace.Wrap(err)
@@ -139,7 +139,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 
 	c.Infof("Deleting current statefulset %v.", formatMeta(currentResource.ObjectMeta))
 	deletePolicy := metav1.DeletePropagationForeground
-	err = collection.Delete(c.StatefulSetConfig.StatefulSet.Name, &metav1.DeleteOptions{
+	err = collection.Delete(c.StatefulSet.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
 	if err != nil {
@@ -147,7 +147,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	err = waitForObjectDeletion(func() error {
-		_, err := collection.Get(c.StatefulSetConfig.StatefulSet.Name, metav1.GetOptions{})
+		_, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
 	if err != nil {
@@ -163,7 +163,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 
 func (c *StatefulSetControl) nodeSelector() labels.Selector {
 	set := make(labels.Set)
-	for key, val := range c.StatefulSetConfig.StatefulSet.Spec.Template.Spec.NodeSelector {
+	for key, val := range c.StatefulSet.Spec.Template.Spec.NodeSelector {
 		set[key] = val
 	}
 	return set.AsSelector()
@@ -171,8 +171,8 @@ func (c *StatefulSetControl) nodeSelector() labels.Selector {
 
 // Status returns status of pods for this resource
 func (c *StatefulSetControl) Status() error {
-	collection := c.Client.AppsV1().StatefulSets(c.StatefulSetConfig.StatefulSet.Namespace)
-	currentResource, err := collection.Get(c.StatefulSetConfig.StatefulSet.Name, metav1.GetOptions{})
+	collection := c.Client.AppsV1().StatefulSets(c.StatefulSet.Namespace)
+	currentResource, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
