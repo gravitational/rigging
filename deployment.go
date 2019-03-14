@@ -44,16 +44,19 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 // DeploymentConfig  is a Deployment control configuration
 type DeploymentConfig struct {
 	// Deployment is already parsed deployment, will be used if present
-	appsv1.Deployment
+	*appsv1.Deployment
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *DeploymentConfig) checkAndSetDefaults() error {
+	if c.Deployment == nil {
+		return trace.BadParameter("missing parameter Deployment")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaDeployment(&c.Deployment)
+	updateTypeMetaDeployment(c.Deployment)
 	return nil
 }
 
@@ -125,10 +128,10 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = deployments.Create(&c.Deployment)
+		_, err = deployments.Create(c.Deployment)
 		return ConvertError(err)
 	}
-	_, err = deployments.Update(&c.Deployment)
+	_, err = deployments.Update(c.Deployment)
 	return ConvertError(err)
 }
 

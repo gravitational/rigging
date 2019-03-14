@@ -44,16 +44,19 @@ func NewDSControl(config DSConfig) (*DSControl, error) {
 // DSConfig is a DaemonSet control configuration
 type DSConfig struct {
 	// DaemonSet specifies the existing resource
-	appsv1.DaemonSet
+	*appsv1.DaemonSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *DSConfig) checkAndSetDefaults() error {
+	if c.DaemonSet == nil {
+		return trace.BadParameter("missing parameter DaemonSet")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaDaemonset(&c.DaemonSet)
+	updateTypeMetaDaemonset(c.DaemonSet)
 	return nil
 }
 
@@ -128,7 +131,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentDS != nil {
-		control, err := NewDSControl(DSConfig{DaemonSet: *currentDS, Client: c.Client})
+		control, err := NewDSControl(DSConfig{DaemonSet: currentDS, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -144,7 +147,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	c.DaemonSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = daemons.Create(&c.DaemonSet)
+		_, err = daemons.Create(c.DaemonSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)

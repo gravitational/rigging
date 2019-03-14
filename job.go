@@ -93,7 +93,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentJob != nil {
-		control, err := NewJobControl(JobConfig{Job: *currentJob, Clientset: c.Clientset})
+		control, err := NewJobControl(JobConfig{Job: currentJob, Clientset: c.Clientset})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -114,7 +114,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	}
 
 	err = withExponentialBackoff(func() error {
-		_, err := jobs.Create(&c.Job)
+		_, err := jobs.Create(c.Job)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -167,15 +167,18 @@ type JobControl struct {
 }
 
 type JobConfig struct {
-	batchv1.Job
+	*batchv1.Job
 	*kubernetes.Clientset
 }
 
 func (c *JobConfig) checkAndSetDefaults() error {
+	if c.Job == nil {
+		return trace.BadParameter("missing parameter Job")
+	}
 	if c.Clientset == nil {
 		return trace.BadParameter("missing parameter Clientset")
 	}
-	updateTypeMetaJob(&c.Job)
+	updateTypeMetaJob(c.Job)
 	return nil
 }
 

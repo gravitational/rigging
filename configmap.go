@@ -41,16 +41,19 @@ func NewConfigMapControl(config ConfigMapConfig) (*ConfigMapControl, error) {
 // ConfigMapConfig  is a ConfigMap control configuration
 type ConfigMapConfig struct {
 	// ConfigMap is already parsed daemon set, will be used if present
-	v1.ConfigMap
+	*v1.ConfigMap
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *ConfigMapConfig) checkAndSetDefaults() error {
+	if c.ConfigMap == nil {
+		return trace.BadParameter("missing parameter ConfigMap")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaConfigMap(&c.ConfigMap)
+	updateTypeMetaConfigMap(c.ConfigMap)
 	return nil
 }
 
@@ -81,10 +84,10 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = configMaps.Create(&c.ConfigMap)
+		_, err = configMaps.Create(c.ConfigMap)
 		return ConvertError(err)
 	}
-	_, err = configMaps.Update(&c.ConfigMap)
+	_, err = configMaps.Update(c.ConfigMap)
 	return ConvertError(err)
 }
 

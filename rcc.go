@@ -44,7 +44,7 @@ func NewRCControl(config RCConfig) (*RCControl, error) {
 // RCConfig is a ReplicationController control configuration
 type RCConfig struct {
 	// ReplicationController is already parsed daemon set, will be used if present
-	v1.ReplicationController
+	*v1.ReplicationController
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -53,7 +53,7 @@ func (c *RCConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaReplicationController(&c.ReplicationController)
+	updateTypeMetaReplicationController(c.ReplicationController)
 	return nil
 }
 
@@ -131,7 +131,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentRC != nil {
-		control, err := NewRCControl(RCConfig{ReplicationController: *currentRC, Client: c.Client})
+		control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -146,7 +146,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	c.ReplicationController.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = rcs.Create(&c.ReplicationController)
+		_, err = rcs.Create(c.ReplicationController)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)

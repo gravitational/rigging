@@ -41,16 +41,19 @@ func NewPodSecurityPolicyControl(config PodSecurityPolicyConfig) (*PodSecurityPo
 // PodSecurityPolicyConfig defines controller configuration
 type PodSecurityPolicyConfig struct {
 	// PodSecurityPolicy is the existing pod security policy
-	v1beta1.PodSecurityPolicy
+	*v1beta1.PodSecurityPolicy
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *PodSecurityPolicyConfig) CheckAndSetDefaults() error {
+	if c.PodSecurityPolicy == nil {
+		return trace.BadParameter("missing parameter PodSecurityPolicy")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaPodSecurityPolicy(&c.PodSecurityPolicy)
+	updateTypeMetaPodSecurityPolicy(c.PodSecurityPolicy)
 	return nil
 }
 
@@ -81,10 +84,10 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = policies.Create(&c.PodSecurityPolicy)
+		_, err = policies.Create(c.PodSecurityPolicy)
 		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = policies.Update(&c.PodSecurityPolicy)
+	_, err = policies.Update(c.PodSecurityPolicy)
 	return ConvertError(err)
 }
 

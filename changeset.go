@@ -371,7 +371,7 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 			return trace.NotFound("daemonset with UID %v not found", uid)
 		}
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: *daemonset, Client: cs.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: daemonset, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -379,12 +379,12 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 }
 
 func (cs *Changeset) statusStatefulSet(ctx context.Context, data []byte, uid string) error {
-	ss, err := ParseStatefulSet(bytes.NewReader(data))
+	statefulSet, err := ParseStatefulSet(bytes.NewReader(data))
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.AppsV1().StatefulSets(ss.Namespace).Get(ss.Name, metav1.GetOptions{})
+		existing, err := cs.Client.AppsV1().StatefulSets(statefulSet.Namespace).Get(statefulSet.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -392,7 +392,7 @@ func (cs *Changeset) statusStatefulSet(ctx context.Context, data []byte, uid str
 			return trace.NotFound("statefulset with UID %v not found", uid)
 		}
 	}
-	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *ss, Client: cs.Client})
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -413,7 +413,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte, uid string) err
 			return trace.NotFound("job with UID %v not found", uid)
 		}
 	}
-	control, err := NewJobControl(JobConfig{Job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -435,7 +435,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 			return trace.NotFound("replication controller with UID %v not found", uid)
 		}
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: *rc, Client: cs.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -456,7 +456,7 @@ func (cs *Changeset) statusDeployment(ctx context.Context, data []byte, uid stri
 			return trace.NotFound("deployment with UID %v not found", uid)
 		}
 	}
-	control, err := NewDeploymentControl(DeploymentConfig{Deployment: *deployment, Client: cs.Client})
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -477,7 +477,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string)
 			return trace.NotFound("service with UID %v not found", uid)
 		}
 	}
-	control, err := NewServiceControl(ServiceConfig{Service: *service, Client: cs.Client})
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -498,7 +498,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) 
 			return trace.NotFound("secret with UID %v not found", uid)
 		}
 	}
-	control, err := NewSecretControl(SecretConfig{Secret: *secret, Client: cs.Client})
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -519,7 +519,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 			return trace.NotFound("configmap with UID %v not found", uid)
 		}
 	}
-	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: *configMap, Client: cs.Client})
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -540,7 +540,7 @@ func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid 
 			return trace.NotFound("service account with UID %v not found", uid)
 		}
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: *account, Client: cs.Client})
+	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: account, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -561,7 +561,7 @@ func (cs *Changeset) statusRole(ctx context.Context, data []byte, uid string) er
 			return trace.NotFound("role with UID %v not found", uid)
 		}
 	}
-	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	control, err := NewRoleControl(RoleConfig{Role: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -582,7 +582,7 @@ func (cs *Changeset) statusClusterRole(ctx context.Context, data []byte, uid str
 			return trace.NotFound("cluster role with UID %v not found", uid)
 		}
 	}
-	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: *role, Client: cs.Client})
+	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -603,7 +603,7 @@ func (cs *Changeset) statusRoleBinding(ctx context.Context, data []byte, uid str
 			return trace.NotFound("role binding with UID %v not found", uid)
 		}
 	}
-	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: *binding, Client: cs.Client})
+	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -624,7 +624,7 @@ func (cs *Changeset) statusClusterRoleBinding(ctx context.Context, data []byte, 
 			return trace.NotFound("cluster role binding with UID %v not found", uid)
 		}
 	}
-	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: *binding, Client: cs.Client})
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -645,7 +645,7 @@ func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, u
 			return trace.NotFound("pod security policy with UID %v not found", uid)
 		}
 	}
-	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: *policy, Client: cs.Client})
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -681,25 +681,25 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: *daemonSet, Client: cs.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.DaemonSet, func() error {
+	return cs.withDeleteOp(ctx, tr, control.DaemonSet, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
 
 func (cs *Changeset) deleteStatefulSet(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	statefuleSet, err := cs.Client.AppsV1().StatefulSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	statefulSet, err := cs.Client.AppsV1().StatefulSets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *statefuleSet, Client: cs.Client})
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.StatefulSet, func() error {
+	return cs.withDeleteOp(ctx, tr, control.StatefulSet, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -709,11 +709,11 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewJobControl(JobConfig{Job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.Job, func() error {
+	return cs.withDeleteOp(ctx, tr, control.Job, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -723,11 +723,11 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: *rc, Client: cs.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.ReplicationController, func() error {
+	return cs.withDeleteOp(ctx, tr, control.ReplicationController, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -737,11 +737,11 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewDeploymentControl(DeploymentConfig{Deployment: *deployment, Client: cs.Client})
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.Deployment, func() error {
+	return cs.withDeleteOp(ctx, tr, control.Deployment, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -751,11 +751,11 @@ func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, n
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewServiceControl(ServiceConfig{Service: *service, Client: cs.Client})
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.Service, func() error {
+	return cs.withDeleteOp(ctx, tr, control.Service, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -765,11 +765,11 @@ func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: *configMap, Client: cs.Client})
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.ConfigMap, func() error {
+	return cs.withDeleteOp(ctx, tr, control.ConfigMap, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -779,11 +779,11 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewSecretControl(SecretConfig{Secret: *secret, Client: cs.Client})
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.Secret, func() error {
+	return cs.withDeleteOp(ctx, tr, control.Secret, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -793,11 +793,11 @@ func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetReso
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: *account, Client: cs.Client})
+	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: account, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.ServiceAccount, func() error {
+	return cs.withDeleteOp(ctx, tr, control.ServiceAccount, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -807,11 +807,11 @@ func (cs *Changeset) deleteRole(ctx context.Context, tr *ChangesetResource, name
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	control, err := NewRoleControl(RoleConfig{Role: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.Role, func() error {
+	return cs.withDeleteOp(ctx, tr, control.Role, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -821,11 +821,11 @@ func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResourc
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: *role, Client: cs.Client})
+	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.ClusterRole, func() error {
+	return cs.withDeleteOp(ctx, tr, control.ClusterRole, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -835,11 +835,11 @@ func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResourc
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: *binding, Client: cs.Client})
+	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.RoleBinding, func() error {
+	return cs.withDeleteOp(ctx, tr, control.RoleBinding, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -849,11 +849,11 @@ func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *Changeset
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: *binding, Client: cs.Client})
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.ClusterRoleBinding, func() error {
+	return cs.withDeleteOp(ctx, tr, control.ClusterRoleBinding, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -863,11 +863,11 @@ func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetR
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: *policy, Client: cs.Client})
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	return cs.withDeleteOp(ctx, tr, &control.PodSecurityPolicy, func() error {
+	return cs.withDeleteOp(ctx, tr, control.PodSecurityPolicy, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -916,7 +916,7 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: *daemonSet, Client: cs.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -942,7 +942,7 @@ func (cs *Changeset) revertStatefulSet(ctx context.Context, item *ChangesetItem)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *statefulSet, Client: cs.Client})
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -968,7 +968,7 @@ func (cs *Changeset) revertJob(ctx context.Context, item *ChangesetItem) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewJobControl(JobConfig{Job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -994,7 +994,7 @@ func (cs *Changeset) revertReplicationController(ctx context.Context, item *Chan
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: *rc, Client: cs.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1020,7 +1020,7 @@ func (cs *Changeset) revertDeployment(ctx context.Context, item *ChangesetItem) 
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewDeploymentControl(DeploymentConfig{Deployment: *deployment, Client: cs.Client})
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1042,11 +1042,11 @@ func (cs *Changeset) revertService(ctx context.Context, item *ChangesetItem) err
 	if len(resource) == 0 {
 		resource = item.To
 	}
-	svc, err := ParseService(strings.NewReader(resource))
+	service, err := ParseService(strings.NewReader(resource))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewServiceControl(ServiceConfig{Service: *svc, Client: cs.Client})
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1072,7 +1072,7 @@ func (cs *Changeset) revertConfigMap(ctx context.Context, item *ChangesetItem) e
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: *configMap, Client: cs.Client})
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1098,7 +1098,7 @@ func (cs *Changeset) revertSecret(ctx context.Context, item *ChangesetItem) erro
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewSecretControl(SecretConfig{Secret: *secret, Client: cs.Client})
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1124,7 +1124,7 @@ func (cs *Changeset) revertServiceAccount(ctx context.Context, item *ChangesetIt
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: *account, Client: cs.Client})
+	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: account, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1150,7 +1150,7 @@ func (cs *Changeset) revertRole(ctx context.Context, item *ChangesetItem) error 
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	control, err := NewRoleControl(RoleConfig{Role: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1176,7 +1176,7 @@ func (cs *Changeset) revertClusterRole(ctx context.Context, item *ChangesetItem)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: *role, Client: cs.Client})
+	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: role, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1202,7 +1202,7 @@ func (cs *Changeset) revertRoleBinding(ctx context.Context, item *ChangesetItem)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: *binding, Client: cs.Client})
+	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1228,7 +1228,7 @@ func (cs *Changeset) revertClusterRoleBinding(ctx context.Context, item *Changes
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: *binding, Client: cs.Client})
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1250,11 +1250,11 @@ func (cs *Changeset) revertPodSecurityPolicy(ctx context.Context, item *Changese
 	if len(resource) == 0 {
 		resource = item.To
 	}
-	psp, err := ParsePodSecurityPolicy(strings.NewReader(resource))
+	policy, err := ParsePodSecurityPolicy(strings.NewReader(resource))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: *psp, Client: cs.Client})
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1322,14 +1322,14 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 		log.Info("existing job not found")
 		current = nil
 	}
-	control, err := NewJobControl(JobConfig{Job: *job, Clientset: cs.Client})
+	control, err := NewJobControl(JobConfig{Job: job, Clientset: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaJob(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.Job, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.Job, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1354,14 +1354,14 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		log.Debug("existing daemonset not found")
 		current = nil
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: *daemonSet, Client: cs.Client})
+	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaDaemonset(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.DaemonSet, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.DaemonSet, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1386,14 +1386,14 @@ func (cs *Changeset) upsertStatefulSet(ctx context.Context, tr *ChangesetResourc
 		log.Debug("existing statefulset not found")
 		current = nil
 	}
-	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *statefulSet, Client: cs.Client})
+	control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: statefulSet, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaStatefulSet(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.StatefulSet, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.StatefulSet, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1418,14 +1418,14 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		log.Debug("existing replication controller not found")
 		current = nil
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: *rc, Client: cs.Client})
+	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaReplicationController(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.ReplicationController, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.ReplicationController, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1450,14 +1450,14 @@ func (cs *Changeset) upsertDeployment(ctx context.Context, tr *ChangesetResource
 		log.Debug("existing deployment not found")
 		current = nil
 	}
-	control, err := NewDeploymentControl(DeploymentConfig{Deployment: *deployment, Client: cs.Client})
+	control, err := NewDeploymentControl(DeploymentConfig{Deployment: deployment, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaDeployment(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.Deployment, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.Deployment, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1482,14 +1482,14 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		log.Debug("existing service not found")
 		current = nil
 	}
-	control, err := NewServiceControl(ServiceConfig{Service: *service, Client: cs.Client})
+	control, err := NewServiceControl(ServiceConfig{Service: service, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaService(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.Service, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.Service, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1513,14 +1513,14 @@ func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetReso
 		log.Debug("existing service account not found")
 		current = nil
 	}
-	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: *account, Client: cs.Client})
+	control, err := NewServiceAccountControl(ServiceAccountConfig{ServiceAccount: account, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaServiceAccount(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.ServiceAccount, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.ServiceAccount, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1544,14 +1544,14 @@ func (cs *Changeset) upsertRole(ctx context.Context, tr *ChangesetResource, data
 		log.Debug("existing role not found")
 		current = nil
 	}
-	control, err := NewRoleControl(RoleConfig{Role: *role, Client: cs.Client})
+	control, err := NewRoleControl(RoleConfig{Role: role, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaRole(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.Role, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.Role, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1575,14 +1575,14 @@ func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResourc
 		log.Debug("existing cluster role not found")
 		current = nil
 	}
-	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: *role, Client: cs.Client})
+	control, err := NewClusterRoleControl(ClusterRoleConfig{ClusterRole: role, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaClusterRole(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.ClusterRole, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.ClusterRole, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1606,14 +1606,14 @@ func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResourc
 		log.Debug("existing role binding not found")
 		current = nil
 	}
-	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: *binding, Client: cs.Client})
+	control, err := NewRoleBindingControl(RoleBindingConfig{RoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaRoleBinding(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.RoleBinding, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.RoleBinding, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1637,14 +1637,14 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 		log.Debug("existing cluster role binding not found")
 		current = nil
 	}
-	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: *binding, Client: cs.Client})
+	control, err := NewClusterRoleBindingControl(ClusterRoleBindingConfig{ClusterRoleBinding: binding, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaClusterRoleBinding(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.ClusterRoleBinding, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.ClusterRoleBinding, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1668,14 +1668,14 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		log.Debug("existing pod security policy not found")
 		current = nil
 	}
-	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: *policy, Client: cs.Client})
+	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaPodSecurityPolicy(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.PodSecurityPolicy, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.PodSecurityPolicy, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1700,14 +1700,14 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 		log.Debug("existing configmap not found")
 		current = nil
 	}
-	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: *configMap, Client: cs.Client})
+	control, err := NewConfigMapControl(ConfigMapConfig{ConfigMap: configMap, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaConfigMap(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.ConfigMap, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.ConfigMap, func() error {
 		return control.Upsert(ctx)
 	})
 }
@@ -1732,14 +1732,14 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 		log.Debug("existing secret not found")
 		current = nil
 	}
-	control, err := NewSecretControl(SecretConfig{Secret: *secret, Client: cs.Client})
+	control, err := NewSecretControl(SecretConfig{Secret: secret, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	if current != nil {
 		updateTypeMetaSecret(current)
 	}
-	return cs.withUpsertOp(ctx, tr, current, &control.Secret, func() error {
+	return cs.withUpsertOp(ctx, tr, current, control.Secret, func() error {
 		return control.Upsert(ctx)
 	})
 }

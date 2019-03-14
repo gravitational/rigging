@@ -45,17 +45,20 @@ func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error
 // StatefulSetConfig is a StatefulSet control configuration
 type StatefulSetConfig struct {
 	// StatefulSet is already parsed statefulset
-	appsv1.StatefulSet
+	*appsv1.StatefulSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 // checkAndSetDefaults validates this configuration object and sets defaults
 func (c *StatefulSetConfig) checkAndSetDefaults() error {
+	if c.StatefulSet == nil {
+		return trace.BadParameter("missing parameter StatefulSet")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaStatefulSet(&c.StatefulSet)
+	updateTypeMetaStatefulSet(c.StatefulSet)
 	return nil
 }
 
@@ -81,7 +84,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentResource != nil {
-		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *currentResource, Client: c.Client})
+		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: currentResource, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -98,7 +101,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.StatefulSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = collection.Create(&c.StatefulSet)
+		_, err = collection.Create(c.StatefulSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)

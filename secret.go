@@ -41,16 +41,19 @@ func NewSecretControl(config SecretConfig) (*SecretControl, error) {
 // SecretConfig  is a Secret control configuration
 type SecretConfig struct {
 	// Secret is already parsed daemon set, will be used if present
-	v1.Secret
+	*v1.Secret
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *SecretConfig) checkAndSetDefaults() error {
+	if c.Secret == nil {
+		return trace.BadParameter("missing parameter Secret")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaSecret(&c.Secret)
+	updateTypeMetaSecret(c.Secret)
 	return nil
 }
 
@@ -81,10 +84,10 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = secrets.Create(&c.Secret)
+		_, err = secrets.Create(c.Secret)
 		return ConvertError(err)
 	}
-	_, err = secrets.Update(&c.Secret)
+	_, err = secrets.Update(c.Secret)
 	return ConvertError(err)
 }
 

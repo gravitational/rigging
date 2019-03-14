@@ -41,16 +41,19 @@ func NewServiceAccountControl(config ServiceAccountConfig) (*ServiceAccountContr
 // ServiceAccountConfig defines controller configuration
 type ServiceAccountConfig struct {
 	// ServiceAccount is the existing service account
-	v1.ServiceAccount
+	*v1.ServiceAccount
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *ServiceAccountConfig) checkAndSetDefaults() error {
+	if c.ServiceAccount == nil {
+		return trace.BadParameter("missing parameter ServiceAccount")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaServiceAccount(&c.ServiceAccount)
+	updateTypeMetaServiceAccount(c.ServiceAccount)
 	return nil
 }
 
@@ -81,10 +84,10 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = accounts.Create(&c.ServiceAccount)
+		_, err = accounts.Create(c.ServiceAccount)
 		return ConvertError(err)
 	}
-	_, err = accounts.Update(&c.ServiceAccount)
+	_, err = accounts.Update(c.ServiceAccount)
 	return ConvertError(err)
 }
 

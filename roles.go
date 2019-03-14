@@ -41,16 +41,19 @@ func NewRoleControl(config RoleConfig) (*RoleControl, error) {
 // RoleConfig defines controller configuration
 type RoleConfig struct {
 	// Role is the existing role
-	v1.Role
+	*v1.Role
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *RoleConfig) checkAndSetDefaults() error {
+	if c.Role == nil {
+		return trace.BadParameter("missing parameter Role")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaRole(&c.Role)
+	updateTypeMetaRole(c.Role)
 	return nil
 }
 
@@ -81,10 +84,10 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = roles.Create(&c.Role)
+		_, err = roles.Create(c.Role)
 		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = roles.Update(&c.Role)
+	_, err = roles.Update(c.Role)
 	return ConvertError(err)
 }
 
@@ -111,16 +114,19 @@ func NewClusterRoleControl(config ClusterRoleConfig) (*ClusterRoleControl, error
 // ClusterRoleConfig defines controller configuration
 type ClusterRoleConfig struct {
 	// Role is the existing cluster role
-	v1.ClusterRole
+	*v1.ClusterRole
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *ClusterRoleConfig) checkAndSetDefaults() error {
+	if c.ClusterRole == nil {
+		return trace.BadParameter("missing parameter ClusterRole")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaClusterRole(&c.ClusterRole)
+	updateTypeMetaClusterRole(c.ClusterRole)
 	return nil
 }
 
@@ -151,10 +157,10 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = roles.Create(&c.ClusterRole)
+		_, err = roles.Create(c.ClusterRole)
 		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = roles.Update(&c.ClusterRole)
+	_, err = roles.Update(c.ClusterRole)
 	return ConvertError(err)
 }
 
@@ -181,16 +187,19 @@ func NewRoleBindingControl(config RoleBindingConfig) (*RoleBindingControl, error
 // RoleBindingConfig defines controller configuration
 type RoleBindingConfig struct {
 	// RoleBinding is the existing role binding
-	v1.RoleBinding
+	*v1.RoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *RoleBindingConfig) checkAndSetDefaults() error {
+	if c.RoleBinding == nil {
+		return trace.BadParameter("missing parameter RoleBinding")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaRoleBinding(&c.RoleBinding)
+	updateTypeMetaRoleBinding(c.RoleBinding)
 	return nil
 }
 
@@ -221,10 +230,10 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = bindings.Create(&c.RoleBinding)
+		_, err = bindings.Create(c.RoleBinding)
 		return ConvertErrorWithContext(err, "cannot create role binding %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = bindings.Update(&c.RoleBinding)
+	_, err = bindings.Update(c.RoleBinding)
 	return ConvertError(err)
 }
 
@@ -251,16 +260,19 @@ func NewClusterRoleBindingControl(config ClusterRoleBindingConfig) (*ClusterRole
 // ClusterRoleBindingConfig defines controller configuration
 type ClusterRoleBindingConfig struct {
 	// Binding is the existing cluster role binding
-	v1.ClusterRoleBinding
+	*v1.ClusterRoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *ClusterRoleBindingConfig) checkAndSetDefaults() error {
+	if c.ClusterRoleBinding == nil {
+		return trace.BadParameter("missing parameter ClusterRoleBinding")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaClusterRoleBinding(&c.ClusterRoleBinding)
+	updateTypeMetaClusterRoleBinding(c.ClusterRoleBinding)
 	return nil
 }
 
@@ -291,10 +303,10 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = bindings.Create(&c.ClusterRoleBinding)
+		_, err = bindings.Create(c.ClusterRoleBinding)
 		return ConvertErrorWithContext(err, "cannot create cluster role binding %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = bindings.Update(&c.ClusterRoleBinding)
+	_, err = bindings.Update(c.ClusterRoleBinding)
 	return ConvertError(err)
 }
 

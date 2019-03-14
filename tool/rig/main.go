@@ -297,12 +297,12 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		fmt.Printf("no errors detected for %v\n", resource.Name)
 		return nil
 	case rigging.KindDaemonSet:
-		ds, err := client.Apps().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
+		daemonSet, err := client.Apps().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
 		if err != nil {
 			return trace.Wrap(err)
 		}
 		updater, err := rigging.NewDSControl(rigging.DSConfig{
-			DaemonSet: *ds,
+			DaemonSet: daemonSet,
 			Client:    client,
 		})
 		if err != nil {
@@ -315,7 +315,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 			return trace.Wrap(err)
 		}
 		updater, err := rigging.NewDeploymentControl(rigging.DeploymentConfig{
-			Deployment: *deployment,
+			Deployment: deployment,
 			Client:     client,
 		})
 		if err != nil {

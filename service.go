@@ -41,16 +41,19 @@ func NewServiceControl(config ServiceConfig) (*ServiceControl, error) {
 // ServiceConfig  is a Service control configuration
 type ServiceConfig struct {
 	// Service is already parsed daemon set, will be used if present
-	v1.Service
+	*v1.Service
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
 func (c *ServiceConfig) CheckAndSetDefaults() error {
+	if c.Service == nil {
+		return trace.BadParameter("missing parameter Service")
+	}
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	updateTypeMetaService(&c.Service)
+	updateTypeMetaService(c.Service)
 	return nil
 }
 
@@ -81,12 +84,12 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 		c.Service.UID = ""
 		c.Service.SelfLink = ""
 		c.Service.ResourceVersion = ""
-		_, err = services.Create(&c.Service)
+		_, err = services.Create(c.Service)
 		return ConvertError(err)
 	}
 	c.Service.Spec.ClusterIP = currentService.Spec.ClusterIP
 	c.Service.ResourceVersion = currentService.ResourceVersion
-	_, err = services.Update(&c.Service)
+	_, err = services.Update(c.Service)
 	return ConvertError(err)
 }
 
