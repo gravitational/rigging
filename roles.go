@@ -17,8 +17,8 @@ package rigging
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/gravitational/trace"
+	log "github.com/sirupsen/logrus"
 	"k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -26,14 +26,13 @@ import (
 
 // NewRoleControl returns a new instance of the Role controller
 func NewRoleControl(config RoleConfig) (*RoleControl, error) {
-	err := config.CheckAndSetDefaults()
+	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &RoleControl{
 		RoleConfig: config,
-		Role:       config.Role,
-		Entry: log.WithFields(log.Fields{
+		FieldLogger: log.WithFields(log.Fields{
 			"role": formatMeta(config.Role.ObjectMeta),
 		}),
 	}, nil
@@ -42,17 +41,16 @@ func NewRoleControl(config RoleConfig) (*RoleControl, error) {
 // RoleConfig defines controller configuration
 type RoleConfig struct {
 	// Role is the existing role
-	Role v1.Role
+	v1.Role
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-func (c *RoleConfig) CheckAndSetDefaults() error {
+func (c *RoleConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	c.Role.Kind = KindRole
-	c.Role.APIVersion = RBACAPIVersion
+	updateTypeMetaRole(&c.Role)
 	return nil
 }
 
@@ -60,8 +58,7 @@ func (c *RoleConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type RoleControl struct {
 	RoleConfig
-	v1.Role
-	*log.Entry
+	log.FieldLogger
 }
 
 func (c *RoleControl) Delete(ctx context.Context, cascade bool) error {
@@ -99,15 +96,14 @@ func (c *RoleControl) Status() error {
 
 // NewClusterRoleControl returns a new instance of the ClusterRole controller
 func NewClusterRoleControl(config ClusterRoleConfig) (*ClusterRoleControl, error) {
-	err := config.CheckAndSetDefaults()
+	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &ClusterRoleControl{
 		ClusterRoleConfig: config,
-		ClusterRole:       config.Role,
-		Entry: log.WithFields(log.Fields{
-			"cluster_role": formatMeta(config.Role.ObjectMeta),
+		FieldLogger: log.WithFields(log.Fields{
+			"cluster_role": formatMeta(config.ObjectMeta),
 		}),
 	}, nil
 }
@@ -115,17 +111,16 @@ func NewClusterRoleControl(config ClusterRoleConfig) (*ClusterRoleControl, error
 // ClusterRoleConfig defines controller configuration
 type ClusterRoleConfig struct {
 	// Role is the existing cluster role
-	Role v1.ClusterRole
+	v1.ClusterRole
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-func (c *ClusterRoleConfig) CheckAndSetDefaults() error {
+func (c *ClusterRoleConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	c.Role.Kind = KindClusterRole
-	c.Role.APIVersion = RBACAPIVersion
+	updateTypeMetaClusterRole(&c.ClusterRole)
 	return nil
 }
 
@@ -133,8 +128,7 @@ func (c *ClusterRoleConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type ClusterRoleControl struct {
 	ClusterRoleConfig
-	v1.ClusterRole
-	*log.Entry
+	log.FieldLogger
 }
 
 func (c *ClusterRoleControl) Delete(ctx context.Context, cascade bool) error {
@@ -157,10 +151,10 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = roles.Create(&c.Role)
+		_, err = roles.Create(&c.ClusterRole)
 		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta))
 	}
-	_, err = roles.Update(&c.Role)
+	_, err = roles.Update(&c.ClusterRole)
 	return ConvertError(err)
 }
 
@@ -172,15 +166,14 @@ func (c *ClusterRoleControl) Status() error {
 
 // NewRoleBindingControl returns a new instance of the RoleBinding controller
 func NewRoleBindingControl(config RoleBindingConfig) (*RoleBindingControl, error) {
-	err := config.CheckAndSetDefaults()
+	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &RoleBindingControl{
 		RoleBindingConfig: config,
-		RoleBinding:       config.Binding,
-		Entry: log.WithFields(log.Fields{
-			"role_binding": formatMeta(config.Binding.ObjectMeta),
+		FieldLogger: log.WithFields(log.Fields{
+			"role_binding": formatMeta(config.ObjectMeta),
 		}),
 	}, nil
 }
@@ -188,17 +181,16 @@ func NewRoleBindingControl(config RoleBindingConfig) (*RoleBindingControl, error
 // RoleBindingConfig defines controller configuration
 type RoleBindingConfig struct {
 	// RoleBinding is the existing role binding
-	Binding v1.RoleBinding
+	v1.RoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-func (c *RoleBindingConfig) CheckAndSetDefaults() error {
+func (c *RoleBindingConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	c.Binding.Kind = KindRoleBinding
-	c.Binding.APIVersion = RBACAPIVersion
+	updateTypeMetaRoleBinding(&c.RoleBinding)
 	return nil
 }
 
@@ -206,8 +198,7 @@ func (c *RoleBindingConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type RoleBindingControl struct {
 	RoleBindingConfig
-	v1.RoleBinding
-	*log.Entry
+	log.FieldLogger
 }
 
 func (c *RoleBindingControl) Delete(ctx context.Context, cascade bool) error {
@@ -245,15 +236,14 @@ func (c *RoleBindingControl) Status() error {
 
 // NewClusterRoleBindingControl returns a new instance of the ClusterRoleBinding controller
 func NewClusterRoleBindingControl(config ClusterRoleBindingConfig) (*ClusterRoleBindingControl, error) {
-	err := config.CheckAndSetDefaults()
+	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	return &ClusterRoleBindingControl{
 		ClusterRoleBindingConfig: config,
-		ClusterRoleBinding:       config.Binding,
-		Entry: log.WithFields(log.Fields{
-			"cluster_role_binding": formatMeta(config.Binding.ObjectMeta),
+		FieldLogger: log.WithFields(log.Fields{
+			"cluster_role_binding": formatMeta(config.ObjectMeta),
 		}),
 	}, nil
 }
@@ -261,17 +251,16 @@ func NewClusterRoleBindingControl(config ClusterRoleBindingConfig) (*ClusterRole
 // ClusterRoleBindingConfig defines controller configuration
 type ClusterRoleBindingConfig struct {
 	// Binding is the existing cluster role binding
-	Binding v1.ClusterRoleBinding
+	v1.ClusterRoleBinding
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-func (c *ClusterRoleBindingConfig) CheckAndSetDefaults() error {
+func (c *ClusterRoleBindingConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
 		return trace.BadParameter("missing parameter Client")
 	}
-	c.Binding.Kind = KindClusterRoleBinding
-	c.Binding.APIVersion = RBACAPIVersion
+	updateTypeMetaClusterRoleBinding(&c.ClusterRoleBinding)
 	return nil
 }
 
@@ -279,8 +268,7 @@ func (c *ClusterRoleBindingConfig) CheckAndSetDefaults() error {
 // adds various operations, like delete, status check and update
 type ClusterRoleBindingControl struct {
 	ClusterRoleBindingConfig
-	v1.ClusterRoleBinding
-	*log.Entry
+	log.FieldLogger
 }
 
 func (c *ClusterRoleBindingControl) Delete(ctx context.Context, cascade bool) error {
@@ -314,4 +302,32 @@ func (c *ClusterRoleBindingControl) Status() error {
 	bindings := c.Client.RbacV1().ClusterRoleBindings()
 	_, err := bindings.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
+}
+
+func updateTypeMetaRole(r *v1.Role) {
+	r.Kind = KindRole
+	if r.APIVersion == "" {
+		r.APIVersion = v1.SchemeGroupVersion.String()
+	}
+}
+
+func updateTypeMetaRoleBinding(r *v1.RoleBinding) {
+	r.Kind = KindRoleBinding
+	if r.APIVersion == "" {
+		r.APIVersion = v1.SchemeGroupVersion.String()
+	}
+}
+
+func updateTypeMetaClusterRole(r *v1.ClusterRole) {
+	r.Kind = KindClusterRole
+	if r.APIVersion == "" {
+		r.APIVersion = v1.SchemeGroupVersion.String()
+	}
+}
+
+func updateTypeMetaClusterRoleBinding(r *v1.ClusterRoleBinding) {
+	r.Kind = KindClusterRoleBinding
+	if r.APIVersion == "" {
+		r.APIVersion = v1.SchemeGroupVersion.String()
+	}
 }

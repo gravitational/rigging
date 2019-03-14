@@ -302,7 +302,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 			return trace.Wrap(err)
 		}
 		updater, err := rigging.NewDSControl(rigging.DSConfig{
-			DaemonSet: ds,
+			DaemonSet: *ds,
 			Client:    client,
 		})
 		if err != nil {
@@ -315,7 +315,7 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 			return trace.Wrap(err)
 		}
 		updater, err := rigging.NewDeploymentControl(rigging.DeploymentConfig{
-			Deployment: deployment,
+			Deployment: *deployment,
 			Client:     client,
 		})
 		if err != nil {

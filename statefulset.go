@@ -30,14 +30,13 @@ import (
 
 // NewStatefulSetControl returns new instance of the StatefulSet controller
 func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error) {
-	err := config.CheckAndSetDefaults()
+	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	return &StatefulSetControl{
 		StatefulSetConfig: config,
-		Entry: log.WithFields(log.Fields{
+		FieldLogger: log.WithFields(log.Fields{
 			"statefulset": formatMeta(config.StatefulSet.ObjectMeta),
 		}),
 	}, nil
@@ -46,28 +45,25 @@ func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error
 // StatefulSetConfig is a StatefulSet control configuration
 type StatefulSetConfig struct {
 	// StatefulSet is already parsed statefulset
-	*appsv1.StatefulSet
+	appsv1.StatefulSet
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
 
-// CheckAndSetDefaults validates this configuration object and sets defaults
-func (c *StatefulSetConfig) CheckAndSetDefaults() error {
-	var errors []error
-	if c.StatefulSet == nil {
-		errors = append(errors, trace.BadParameter("missing parameter StatefulSet"))
-	}
+// checkAndSetDefaults validates this configuration object and sets defaults
+func (c *StatefulSetConfig) checkAndSetDefaults() error {
 	if c.Client == nil {
-		errors = append(errors, trace.BadParameter("missing parameter Client"))
+		return trace.BadParameter("missing parameter Client")
 	}
-	return trace.NewAggregate(errors...)
+	updateTypeMetaStatefulSet(&c.StatefulSet)
+	return nil
 }
 
 // StatefulSetControl is a statefulset controller,
 // adds various operations, like delete, status check and update
 type StatefulSetControl struct {
 	StatefulSetConfig
-	*log.Entry
+	log.FieldLogger
 }
 
 // Upsert creates or updates a statefulset resource
@@ -85,7 +81,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentResource != nil {
-		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: currentResource, Client: c.Client})
+		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: *currentResource, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -102,7 +98,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	c.StatefulSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = collection.Create(c.StatefulSet)
+		_, err = collection.Create(&c.StatefulSet)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -115,7 +111,7 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 	if statefulSet.Spec.Selector != nil {
 		labels = statefulSet.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(statefulSet.Namespace, labels, c.Entry, c.Client, func(ref metav1.OwnerReference) bool {
+	pods, err := CollectPods(statefulSet.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindStatefulSet && ref.UID == statefulSet.UID
 	})
 	return pods, trace.Wrap(err)
@@ -157,7 +153,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 	if !cascade {
 		c.Debug("Cascade not set, returning.")
 	}
-	err = deletePods(pods, currentPods, *c.Entry)
+	err = deletePods(pods, currentPods, c.FieldLogger)
 	return trace.Wrap(err)
 }
 
@@ -187,5 +183,12 @@ func (c *StatefulSetControl) Status() error {
 	if err != nil {
 		return ConvertError(err)
 	}
-	return checkRunning(currentPods, nodes.Items, c.Entry)
+	return checkRunning(currentPods, nodes.Items, c.FieldLogger)
+}
+
+func updateTypeMetaStatefulSet(r *appsv1.StatefulSet) {
+	r.Kind = KindStatefulSet
+	if r.APIVersion == "" {
+		r.APIVersion = appsv1.SchemeGroupVersion.String()
+	}
 }

@@ -31,10 +31,9 @@ func NewJobControl(config JobConfig) (*JobControl, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	return &JobControl{
 		JobConfig: config,
-		Entry: log.WithFields(log.Fields{
+		FieldLogger: log.WithFields(log.Fields{
 			"job": formatMeta(config.Job.ObjectMeta),
 		}),
 	}, nil
@@ -75,7 +74,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 	if !cascade {
 		c.Info("cascade not set, returning")
 	}
-	err = deletePods(pods, currentPods, *c.Entry)
+	err = deletePods(pods, currentPods, c.FieldLogger)
 	return trace.Wrap(err)
 }
 
@@ -94,7 +93,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentJob != nil {
-		control, err := NewJobControl(JobConfig{Job: currentJob, Clientset: c.Clientset})
+		control, err := NewJobControl(JobConfig{Job: *currentJob, Clientset: c.Clientset})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -115,7 +114,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 	}
 
 	err = withExponentialBackoff(func() error {
-		_, err := jobs.Create(c.Job)
+		_, err := jobs.Create(&c.Job)
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -156,7 +155,7 @@ func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 	if job.Spec.Selector != nil {
 		labels = job.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(job.Namespace, labels, c.Entry, c.Clientset, func(ref metav1.OwnerReference) bool {
+	pods, err := CollectPods(job.Namespace, labels, c.FieldLogger, c.Clientset, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindJob && ref.UID == job.UID
 	})
 	return pods, ConvertError(err)
@@ -164,11 +163,11 @@ func (c *JobControl) collectPods(job *batchv1.Job) (map[string]v1.Pod, error) {
 
 type JobControl struct {
 	JobConfig
-	*log.Entry
+	log.FieldLogger
 }
 
 type JobConfig struct {
-	Job *batchv1.Job
+	batchv1.Job
 	*kubernetes.Clientset
 }
 
@@ -176,9 +175,13 @@ func (c *JobConfig) checkAndSetDefaults() error {
 	if c.Clientset == nil {
 		return trace.BadParameter("missing parameter Clientset")
 	}
-	c.Job.Kind = KindJob
-	if c.Job.APIVersion == "" {
-		c.Job.APIVersion = BatchAPIVersion
-	}
+	updateTypeMetaJob(&c.Job)
 	return nil
+}
+
+func updateTypeMetaJob(r *batchv1.Job) {
+	r.Kind = KindJob
+	if r.APIVersion == "" {
+		r.APIVersion = batchv1.SchemeGroupVersion.String()
+	}
 }
