@@ -40,7 +40,7 @@ func NewSecretControl(config SecretConfig) (*SecretControl, error) {
 
 // SecretConfig  is a Secret control configuration
 type SecretConfig struct {
-	// Secret is already parsed daemon set, will be used if present
+	// Secret specifies the existing secret
 	*v1.Secret
 	// Client is k8s client
 	Client *kubernetes.Clientset

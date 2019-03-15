@@ -43,7 +43,7 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 
 // DeploymentConfig  is a Deployment control configuration
 type DeploymentConfig struct {
-	// Deployment is already parsed deployment, will be used if present
+	// Deployment specifies the existing deployment
 	*appsv1.Deployment
 	// Client is k8s client
 	Client *kubernetes.Clientset

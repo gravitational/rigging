@@ -40,7 +40,7 @@ func NewServiceControl(config ServiceConfig) (*ServiceControl, error) {
 
 // ServiceConfig  is a Service control configuration
 type ServiceConfig struct {
-	// Service is already parsed daemon set, will be used if present
+	// Service specifies the existing service
 	*v1.Service
 	// Client is k8s client
 	Client *kubernetes.Clientset

@@ -27,8 +27,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// NewDSControl returns new instance of DaemonSet updater
-func NewDSControl(config DSConfig) (*DSControl, error) {
+// NewDaemonSetControl returns new instance of DaemonSet controller
+func NewDaemonSetControl(config DSConfig) (*DSControl, error) {
 	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -131,7 +131,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentDS != nil {
-		control, err := NewDSControl(DSConfig{DaemonSet: currentDS, Client: c.Client})
+		control, err := NewDaemonSetControl(DSConfig{DaemonSet: currentDS, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
 		}

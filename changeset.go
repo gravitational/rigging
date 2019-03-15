@@ -371,7 +371,7 @@ func (cs *Changeset) statusDaemonSet(ctx context.Context, data []byte, uid strin
 			return trace.NotFound("daemonset with UID %v not found", uid)
 		}
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: daemonset, Client: cs.Client})
+	control, err := NewDaemonSetControl(DSConfig{DaemonSet: daemonset, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -435,7 +435,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 			return trace.NotFound("replication controller with UID %v not found", uid)
 		}
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
+	control, err := NewReplicationControllerControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -681,7 +681,7 @@ func (cs *Changeset) deleteDaemonSet(ctx context.Context, tr *ChangesetResource,
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
+	control, err := NewDaemonSetControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -723,7 +723,7 @@ func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namesp
 	if err != nil {
 		return ConvertError(err)
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
+	control, err := NewReplicationControllerControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -916,7 +916,7 @@ func (cs *Changeset) revertDaemonSet(ctx context.Context, item *ChangesetItem) e
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
+	control, err := NewDaemonSetControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -994,7 +994,7 @@ func (cs *Changeset) revertReplicationController(ctx context.Context, item *Chan
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
+	control, err := NewReplicationControllerControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1354,7 +1354,7 @@ func (cs *Changeset) upsertDaemonSet(ctx context.Context, tr *ChangesetResource,
 		log.Debug("existing daemonset not found")
 		current = nil
 	}
-	control, err := NewDSControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
+	control, err := NewDaemonSetControl(DSConfig{DaemonSet: daemonSet, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1418,7 +1418,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		log.Debug("existing replication controller not found")
 		current = nil
 	}
-	control, err := NewRCControl(RCConfig{ReplicationController: rc, Client: cs.Client})
+	control, err := NewReplicationControllerControl(RCConfig{ReplicationController: rc, Client: cs.Client})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

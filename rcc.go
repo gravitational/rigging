@@ -26,8 +26,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// NewRCControl returns new instance of ReplicationController updater
-func NewRCControl(config RCConfig) (*RCControl, error) {
+// NewReplicationControllerControl returns new instance of ReplicationController control
+func NewReplicationControllerControl(config RCConfig) (*RCControl, error) {
 	err := config.checkAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -43,7 +43,7 @@ func NewRCControl(config RCConfig) (*RCControl, error) {
 
 // RCConfig is a ReplicationController control configuration
 type RCConfig struct {
-	// ReplicationController is already parsed daemon set, will be used if present
+	// ReplicationController specifies the existing ReplicationController
 	*v1.ReplicationController
 	// Client is k8s client
 	Client *kubernetes.Clientset
@@ -131,7 +131,7 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentRC != nil {
-		control, err := NewRCControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
+		control, err := NewReplicationControllerControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
 		if err != nil {
 			return ConvertError(err)
 		}
