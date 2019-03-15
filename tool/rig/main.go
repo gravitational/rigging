@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -297,12 +296,12 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		fmt.Printf("no errors detected for %v\n", resource.Name)
 		return nil
 	case rigging.KindDaemonSet:
-		ds, err := client.Apps().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
+		daemonSet, err := client.Apps().DaemonSets(namespace).Get(resource.Name, metav1.GetOptions{})
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		updater, err := rigging.NewDSControl(rigging.DSConfig{
-			DaemonSet: ds,
+		updater, err := rigging.NewDaemonSetControl(rigging.DSConfig{
+			DaemonSet: daemonSet,
 			Client:    client,
 		})
 		if err != nil {
@@ -328,8 +327,6 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 
 const (
 	outputYAML = "yaml"
-	outputText = "text"
-	outputJSON = "json"
 	// humanDateFormat is a human readable date formatting
 	humanDateFormat = "Mon Jan _2 15:04 UTC"
 	changesetEnvVar = "RIG_CHANGESET"
@@ -424,10 +421,6 @@ func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 	return nil
 }
 
-func printHeader(val string) {
-	fmt.Printf("\n[%v]\n%v\n", val, strings.Repeat("-", len(val)+2))
-}
-
 // InitLoggerCLI tools by default log into syslog, not stderr
 func InitLoggerCLI() {
 	log.SetLevel(log.WarnLevel)
@@ -459,11 +452,6 @@ func TurnOffLogging() {
 	log.SetOutput(ioutil.Discard)
 	log.SetLevel(log.FatalLevel)
 }
-
-const (
-	inCluster  = "in"
-	outCluster = "out"
-)
 
 // NormalizePath normalises path, evaluating symlinks and converting local
 // paths to absolute
