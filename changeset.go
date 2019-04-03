@@ -405,7 +405,7 @@ func (cs *Changeset) statusJob(ctx context.Context, data []byte, uid string) err
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Batch().Jobs(job.Namespace).Get(job.Name, metav1.GetOptions{})
+		existing, err := cs.Client.BatchV1().Jobs(job.Namespace).Get(job.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -426,7 +426,7 @@ func (cs *Changeset) statusRC(ctx context.Context, data []byte, uid string) erro
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Core().ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
+		existing, err := cs.Client.CoreV1().ReplicationControllers(rc.Namespace).Get(rc.Name, metav1.GetOptions{})
 
 		if err != nil {
 			return ConvertError(err)
@@ -469,7 +469,7 @@ func (cs *Changeset) statusService(ctx context.Context, data []byte, uid string)
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Core().Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
+		existing, err := cs.Client.CoreV1().Services(service.Namespace).Get(service.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -490,7 +490,7 @@ func (cs *Changeset) statusSecret(ctx context.Context, data []byte, uid string) 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Core().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
+		existing, err := cs.Client.CoreV1().Secrets(secret.Namespace).Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -511,7 +511,7 @@ func (cs *Changeset) statusConfigMap(ctx context.Context, data []byte, uid strin
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Core().ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
+		existing, err := cs.Client.CoreV1().ConfigMaps(configMap.Namespace).Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -532,7 +532,7 @@ func (cs *Changeset) statusServiceAccount(ctx context.Context, data []byte, uid 
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.Core().ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
+		existing, err := cs.Client.CoreV1().ServiceAccounts(account.Namespace).Get(account.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -705,7 +705,7 @@ func (cs *Changeset) deleteStatefulSet(ctx context.Context, tr *ChangesetResourc
 }
 
 func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	job, err := cs.Client.Batch().Jobs(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	job, err := cs.Client.BatchV1().Jobs(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -719,7 +719,7 @@ func (cs *Changeset) deleteJob(ctx context.Context, tr *ChangesetResource, names
 }
 
 func (cs *Changeset) deleteRC(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	rc, err := cs.Client.Core().ReplicationControllers(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	rc, err := cs.Client.CoreV1().ReplicationControllers(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -747,7 +747,7 @@ func (cs *Changeset) deleteDeployment(ctx context.Context, tr *ChangesetResource
 }
 
 func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	service, err := cs.Client.Core().Services(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	service, err := cs.Client.CoreV1().Services(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -761,7 +761,7 @@ func (cs *Changeset) deleteService(ctx context.Context, tr *ChangesetResource, n
 }
 
 func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	configMap, err := cs.Client.Core().ConfigMaps(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	configMap, err := cs.Client.CoreV1().ConfigMaps(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -775,7 +775,7 @@ func (cs *Changeset) deleteConfigMap(ctx context.Context, tr *ChangesetResource,
 }
 
 func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	secret, err := cs.Client.Core().Secrets(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	secret, err := cs.Client.CoreV1().Secrets(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -789,7 +789,7 @@ func (cs *Changeset) deleteSecret(ctx context.Context, tr *ChangesetResource, na
 }
 
 func (cs *Changeset) deleteServiceAccount(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
-	account, err := cs.Client.Core().ServiceAccounts(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	account, err := cs.Client.CoreV1().ServiceAccounts(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -1312,7 +1312,7 @@ func (cs *Changeset) upsertJob(ctx context.Context, tr *ChangesetResource, data 
 	})
 	log.Infof("upsert job %v", formatMeta(job.ObjectMeta))
 
-	jobs := cs.Client.Batch().Jobs(job.Namespace)
+	jobs := cs.Client.BatchV1().Jobs(job.Namespace)
 	current, err := jobs.Get(job.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1408,7 +1408,7 @@ func (cs *Changeset) upsertRC(ctx context.Context, tr *ChangesetResource, data [
 		"rc": fmt.Sprintf("%v/%v", rc.Namespace, rc.Name),
 	})
 	log.Infof("upsert replication controller %v", formatMeta(rc.ObjectMeta))
-	rcs := cs.Client.Core().ReplicationControllers(rc.Namespace)
+	rcs := cs.Client.CoreV1().ReplicationControllers(rc.Namespace)
 	current, err := rcs.Get(rc.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1472,7 +1472,7 @@ func (cs *Changeset) upsertService(ctx context.Context, tr *ChangesetResource, d
 		"service": fmt.Sprintf("%v/%v", service.Namespace, service.Name),
 	})
 	log.Infof("upsert service %v", formatMeta(service.ObjectMeta))
-	services := cs.Client.Core().Services(service.Namespace)
+	services := cs.Client.CoreV1().Services(service.Namespace)
 	current, err := services.Get(service.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1503,7 +1503,7 @@ func (cs *Changeset) upsertServiceAccount(ctx context.Context, tr *ChangesetReso
 		"cs":              tr.String(),
 		"service_account": formatMeta(account.ObjectMeta),
 	})
-	accounts := cs.Client.Core().ServiceAccounts(account.Namespace)
+	accounts := cs.Client.CoreV1().ServiceAccounts(account.Namespace)
 	current, err := accounts.Get(account.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1690,7 +1690,7 @@ func (cs *Changeset) upsertConfigMap(ctx context.Context, tr *ChangesetResource,
 		"configMap": fmt.Sprintf("%v/%v", configMap.Namespace, configMap.Name),
 	})
 	log.Infof("upsert configmap %v", formatMeta(configMap.ObjectMeta))
-	configMaps := cs.Client.Core().ConfigMaps(configMap.Namespace)
+	configMaps := cs.Client.CoreV1().ConfigMaps(configMap.Namespace)
 	current, err := configMaps.Get(configMap.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -1722,7 +1722,7 @@ func (cs *Changeset) upsertSecret(ctx context.Context, tr *ChangesetResource, da
 		"secret": fmt.Sprintf("%v/%v", secret.Namespace, secret.Name),
 	})
 	log.Infof("upsert secret %v", formatMeta(secret.ObjectMeta))
-	secrets := cs.Client.Core().Secrets(secret.Namespace)
+	secrets := cs.Client.CoreV1().Secrets(secret.Namespace)
 	current, err := secrets.Get(secret.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
