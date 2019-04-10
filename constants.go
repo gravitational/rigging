@@ -48,7 +48,7 @@ const (
 	ChangesetAPIVersion = "changeset.gravitational.io/v1"
 )
 
-// NamespaceOrDefault returns a default namespace if the specified namespace is empty
+// Namespace returns a default namespace if the specified namespace is empty
 func Namespace(namespace string) string {
 	if namespace == "" {
 		return DefaultNamespace
