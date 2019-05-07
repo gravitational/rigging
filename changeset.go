@@ -176,6 +176,8 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	case ChangesetStatusCommitted:
 		// Nothing to do
 		return nil
+	case ChangesetStatusInProgress:
+		return trace.BadParameter("changeset %v is not completed yet", tr.ObjectMeta.Name)
 	}
 
 	if retryAttempts == 0 {
@@ -1624,7 +1626,7 @@ func (cs *Changeset) upsertClusterRoleBinding(ctx context.Context, tr *Changeset
 		return nil, trace.Wrap(err)
 	}
 	log := log.WithFields(log.Fields{
-		"cs":                   tr.String(),
+		"cs": tr.String(),
 		"cluster_role_binding": formatMeta(binding.ObjectMeta),
 	})
 	bindings := cs.Client.RbacV1().ClusterRoleBindings()
@@ -1655,7 +1657,7 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		return nil, trace.Wrap(err)
 	}
 	log := log.WithFields(log.Fields{
-		"cs":                  tr.String(),
+		"cs": tr.String(),
 		"pod_security_policy": formatMeta(policy.ObjectMeta),
 	})
 	policies := cs.Client.ExtensionsV1beta1().PodSecurityPolicies()
