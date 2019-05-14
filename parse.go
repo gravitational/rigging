@@ -20,9 +20,11 @@ import (
 	"github.com/gravitational/trace"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedulingv1beta1 "k8s.io/api/scheduling/v1beta1"
+	extensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -134,6 +136,19 @@ func ParseConfigMap(r io.Reader) (*v1.ConfigMap, error) {
 	return &cm, nil
 }
 
+// ParseCustomResourceDefinition parses a Custom Resource Definition
+func ParseCustomResourceDefinition(r io.Reader) (*extensionsv1beta1.CustomResourceDefinition, error) {
+	if r == nil {
+		return nil, trace.BadParameter("missing reader")
+	}
+	cm := extensionsv1beta1.CustomResourceDefinition{}
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&cm)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &cm, nil
+}
+
 // ParseSecret parses a secret from the specified stream
 func ParseSecret(r io.Reader) (*v1.Secret, error) {
 	if r == nil {
@@ -175,6 +190,26 @@ func ParseClusterRole(r io.Reader) (*rbacv1.ClusterRole, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &role, nil
+}
+
+// ParseNamespace parses a namespace object from the specified stream
+func ParseNamespace(r io.Reader) (*v1.Namespace, error) {
+	var namespace v1.Namespace
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&namespace)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &namespace, nil
+}
+
+// ParsePriorityClass parses a PriorityClass object from the specified stream
+func ParsePriorityClass(r io.Reader) (*schedulingv1beta1.PriorityClass, error) {
+	var pc schedulingv1beta1.PriorityClass
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&pc)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &pc, nil
 }
 
 // ParseRoleBinding parses an rbac role binding from the specified stream
