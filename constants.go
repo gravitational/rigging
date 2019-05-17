@@ -35,6 +35,7 @@ const (
 	KindCustomResourceDefinition = "CustomResourceDefinition"
 	KindNamespace                = "Namespace"
 	KindPriorityClass            = "PriorityClass"
+	KindServiceMonitor           = "ServiceMonitor"
 	ControllerUIDLabel           = "controller-uid"
 	OpStatusCreated              = "created"
 	OpStatusCompleted            = "completed"

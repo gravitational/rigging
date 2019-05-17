@@ -53,6 +53,10 @@
   name = "gopkg.in/yaml.v2"
   version = "=v2.2.2"
 
+[[constraint]]
+  name = "github.com/coreos/prometheus-operator"
+  version = "=v0.30.0"
+
 [[override]]
 name = "cloud.google.com/go"
 revision = "3b1ae45394a234c385be014e9a488f2bb6eef821"
