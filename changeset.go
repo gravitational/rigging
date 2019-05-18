@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoring "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
@@ -33,11 +35,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 )
+
+func init() {
+	runtimeutil.Must(monitoringv1.AddToScheme(scheme.Scheme))
+}
 
 type ChangesetConfig struct {
 	// Client is k8s client
@@ -74,12 +81,22 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		return nil, ConvertError(err)
 	}
 
-	apiclient, err := apiextensionsclientset.NewForConfig(&cfg)
+	apiClient, err := apiextensionsclientset.NewForConfig(&cfg)
 	if err != nil {
 		return nil, ConvertError(err)
 	}
 
-	cs := &Changeset{ChangesetConfig: config, client: clt, APIExtensionsClient: apiclient}
+	monClient, err := monitoring.NewForConfig(&cfg)
+	if err != nil {
+		return nil, ConvertError(err)
+	}
+
+	cs := &Changeset{
+		ChangesetConfig:     config,
+		client:              clt,
+		APIExtensionsClient: apiClient,
+		MonitoringClient:    monClient,
+	}
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -94,6 +111,8 @@ type Changeset struct {
 	client *rest.RESTClient
 	// APIExtensionsClient is a client for the extensions server
 	APIExtensionsClient *apiextensionsclientset.Clientset
+	// MonitoringClient is Prometheus operator client
+	MonitoringClient *monitoring.Clientset
 }
 
 // Upsert upserts resource in a context of a changeset
@@ -164,6 +183,8 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertNamespace(ctx, tr, data)
 	case KindPriorityClass:
 		_, err = cs.upsertPriorityClass(ctx, tr, data)
+	case KindServiceMonitor:
+		_, err = cs.upsertServiceMonitor(ctx, tr, data)
 	default:
 		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
@@ -272,6 +293,8 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteNamespace(ctx, tr, resource.Name, cascade)
 	case KindPriorityClass:
 		return cs.deletePriorityClass(ctx, tr, resource.Name, cascade)
+	case KindServiceMonitor:
+		return cs.deleteServiceMonitor(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
@@ -371,6 +394,8 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusNamespace(ctx, data, uid)
 	case KindPriorityClass:
 		return cs.statusPriorityClass(ctx, data, uid)
+	case KindServiceMonitor:
+		return cs.statusServiceMonitor(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -738,6 +763,31 @@ func (cs *Changeset) statusCustomResourceDefinition(ctx context.Context, data []
 	return control.Status()
 }
 
+func (cs *Changeset) statusServiceMonitor(ctx context.Context, data []byte, uid string) error {
+	serviceMonitor, err := ParseServiceMonitor(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.MonitoringClient.MonitoringV1().ServiceMonitors(
+			serviceMonitor.Namespace).Get(serviceMonitor.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("service monitor with UID %v not found", uid)
+		}
+	}
+	control, err := NewServiceMonitorControl(ServiceMonitorConfig{
+		ServiceMonitor: serviceMonitor,
+		Client:         cs.MonitoringClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
 func (cs *Changeset) withDeleteOp(ctx context.Context, tr *ChangesetResource, obj metav1.Object, fn func() error) error {
 	data, err := goyaml.Marshal(obj)
 	if err != nil {
@@ -944,6 +994,20 @@ func (cs *Changeset) deletePriorityClass(ctx context.Context, tr *ChangesetResou
 	})
 }
 
+func (cs *Changeset) deleteServiceMonitor(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	monitor, err := cs.MonitoringClient.MonitoringV1().ServiceMonitors(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewServiceMonitorControl(ServiceMonitorConfig{ServiceMonitor: monitor, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.ServiceMonitor, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	binding, err := cs.Client.RbacV1().RoleBindings(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -1041,6 +1105,8 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertNamespace(ctx, item)
 	case KindPriorityClass:
 		return cs.revertPriorityClass(ctx, item)
+	case KindServiceMonitor:
+		return cs.revertServiceMonitor(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -1380,6 +1446,29 @@ func (cs *Changeset) revertPriorityClass(ctx context.Context, item *ChangesetIte
 		return trace.Wrap(err)
 	}
 	// this operation either created or updated the resource, so we create a new version
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertServiceMonitor(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	monitor, err := ParseServiceMonitor(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewServiceMonitorControl(ServiceMonitorConfig{ServiceMonitor: monitor, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
 	return control.Upsert(ctx)
 }
 
@@ -1866,6 +1955,38 @@ func (cs *Changeset) upsertPriorityClass(
 		updateTypeMetaPriorityClass(current)
 	}
 	return cs.withUpsertOp(ctx, tr, current, control.PriorityClass, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertServiceMonitor(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	monitor, err := ParseServiceMonitor(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":              tr.String(),
+		"service_monitor": fmt.Sprintf("%v/%v", monitor.Namespace, monitor.Name),
+	})
+	log.Infof("upsert service monitor %v", formatMeta(monitor.ObjectMeta))
+	client := cs.MonitoringClient.MonitoringV1().ServiceMonitors(monitor.Namespace)
+	current, err := client.Get(monitor.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing service monitor not found")
+		current = nil
+	}
+	control, err := NewServiceMonitorControl(ServiceMonitorConfig{ServiceMonitor: monitor, Client: cs.MonitoringClient})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaServiceMonitor(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.ServiceMonitor, func() error {
 		return control.Upsert(ctx)
 	})
 }

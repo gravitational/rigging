@@ -17,6 +17,7 @@ package rigging
 import (
 	"io"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/gravitational/trace"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -240,4 +241,14 @@ func ParsePodSecurityPolicy(r io.Reader) (*v1beta1.PodSecurityPolicy, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &policy, nil
+}
+
+// ParseServiceMonitor parses a ServiceMonitor resource from the provided data
+func ParseServiceMonitor(r io.Reader) (*monitoringv1.ServiceMonitor, error) {
+	var monitor monitoringv1.ServiceMonitor
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&monitor)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &monitor, nil
 }
