@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,7 +36,11 @@ const (
 	KindCustomResourceDefinition = "CustomResourceDefinition"
 	KindNamespace                = "Namespace"
 	KindPriorityClass            = "PriorityClass"
-	KindServiceMonitor           = "ServiceMonitor"
+	KindAPIService               = "APIService"
+	KindServiceMonitor           = monitoringv1.ServiceMonitorsKind
+	KindAlertmanager             = monitoringv1.AlertmanagersKind
+	KindPrometheus               = monitoringv1.PrometheusesKind
+	KindPrometheusRule           = monitoringv1.PrometheusRuleKind
 	ControllerUIDLabel           = "controller-uid"
 	OpStatusCreated              = "created"
 	OpStatusCompleted            = "completed"

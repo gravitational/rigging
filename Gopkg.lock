@@ -528,6 +528,22 @@
   version = "v0.1.0"
 
 [[projects]]
+  digest = "1:413b4f3acf2d99429af249cbfba78a785d224be85069e2564963836b53c2f0e9"
+  name = "k8s.io/kube-aggregator"
+  packages = [
+    "pkg/apis/apiregistration",
+    "pkg/apis/apiregistration/v1",
+    "pkg/apis/apiregistration/v1beta1",
+    "pkg/client/clientset_generated/clientset",
+    "pkg/client/clientset_generated/clientset/scheme",
+    "pkg/client/clientset_generated/clientset/typed/apiregistration/v1",
+    "pkg/client/clientset_generated/clientset/typed/apiregistration/v1beta1",
+  ]
+  pruneopts = "UT"
+  revision = "00b8e31abe9d46d7b3512b4beb0da1a988199855"
+  version = "kubernetes-1.14.1"
+
+[[projects]]
   digest = "1:615bb3fa3f173904665d6f962b5017ebe9a867877cafe1c8d792f7fb46988bf3"
   name = "k8s.io/kube-openapi"
   packages = ["pkg/common"]
@@ -578,6 +594,7 @@
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/runtime/serializer",
+    "k8s.io/apimachinery/pkg/util/runtime",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/apimachinery/pkg/util/yaml",
     "k8s.io/client-go/kubernetes",
@@ -585,6 +602,8 @@
     "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1",
+    "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
