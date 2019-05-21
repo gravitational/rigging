@@ -28,6 +28,7 @@ import (
 	extensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
 type ResourceHeader struct {
@@ -243,6 +244,16 @@ func ParsePodSecurityPolicy(r io.Reader) (*v1beta1.PodSecurityPolicy, error) {
 	return &policy, nil
 }
 
+// ParseAPIService parses a APIService resource from the provided data
+func ParseAPIService(r io.Reader) (*apiregistrationv1.APIService, error) {
+	var apiService apiregistrationv1.APIService
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&apiService)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &apiService, nil
+}
+
 // ParseServiceMonitor parses a ServiceMonitor resource from the provided data
 func ParseServiceMonitor(r io.Reader) (*monitoringv1.ServiceMonitor, error) {
 	var monitor monitoringv1.ServiceMonitor
@@ -251,4 +262,34 @@ func ParseServiceMonitor(r io.Reader) (*monitoringv1.ServiceMonitor, error) {
 		return nil, trace.Wrap(err)
 	}
 	return &monitor, nil
+}
+
+// ParseAlertmanager parses a Alertmanager resource from the provided data
+func ParseAlertmanager(r io.Reader) (*monitoringv1.Alertmanager, error) {
+	var alertManager monitoringv1.Alertmanager
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&alertManager)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &alertManager, nil
+}
+
+// ParsePrometheus parses a Prometheus resource from the provided data
+func ParsePrometheus(r io.Reader) (*monitoringv1.Prometheus, error) {
+	var prometheus monitoringv1.Prometheus
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&prometheus)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &prometheus, nil
+}
+
+// ParsePrometheusRule parses a PrometheusRule resource from the provided data
+func ParsePrometheusRule(r io.Reader) (*monitoringv1.PrometheusRule, error) {
+	var prometheusRule monitoringv1.PrometheusRule
+	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&prometheusRule)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &prometheusRule, nil
 }

@@ -40,10 +40,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	apiregistration "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset"
 )
 
 func init() {
 	runtimeutil.Must(monitoringv1.AddToScheme(scheme.Scheme))
+	runtimeutil.Must(apiregistrationv1.AddToScheme(scheme.Scheme))
 }
 
 type ChangesetConfig struct {
@@ -81,21 +84,27 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		return nil, ConvertError(err)
 	}
 
-	apiClient, err := apiextensionsclientset.NewForConfig(&cfg)
+	apiExtensionsClient, err := apiextensionsclientset.NewForConfig(&cfg)
 	if err != nil {
 		return nil, ConvertError(err)
 	}
 
-	monClient, err := monitoring.NewForConfig(&cfg)
+	monitoringClient, err := monitoring.NewForConfig(&cfg)
+	if err != nil {
+		return nil, ConvertError(err)
+	}
+
+	apiRegistrationClient, err := apiregistration.NewForConfig(&cfg)
 	if err != nil {
 		return nil, ConvertError(err)
 	}
 
 	cs := &Changeset{
-		ChangesetConfig:     config,
-		client:              clt,
-		APIExtensionsClient: apiClient,
-		MonitoringClient:    monClient,
+		ChangesetConfig:       config,
+		client:                clt,
+		APIExtensionsClient:   apiExtensionsClient,
+		APIRegistrationClient: apiRegistrationClient,
+		MonitoringClient:      monitoringClient,
 	}
 	if err := cs.Init(ctx); err != nil {
 		return nil, trace.Wrap(err)
@@ -111,6 +120,8 @@ type Changeset struct {
 	client *rest.RESTClient
 	// APIExtensionsClient is a client for the extensions server
 	APIExtensionsClient *apiextensionsclientset.Clientset
+	// APIRegistrationClient is Kube aggregator clientset
+	APIRegistrationClient *apiregistration.Clientset
 	// MonitoringClient is Prometheus operator client
 	MonitoringClient *monitoring.Clientset
 }
@@ -183,8 +194,16 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertNamespace(ctx, tr, data)
 	case KindPriorityClass:
 		_, err = cs.upsertPriorityClass(ctx, tr, data)
+	case KindAPIService:
+		_, err = cs.upsertAPIService(ctx, tr, data)
 	case KindServiceMonitor:
 		_, err = cs.upsertServiceMonitor(ctx, tr, data)
+	case KindAlertmanager:
+		_, err = cs.upsertAlertmanager(ctx, tr, data)
+	case KindPrometheus:
+		_, err = cs.upsertPrometheus(ctx, tr, data)
+	case KindPrometheusRule:
+		_, err = cs.upsertPrometheusRule(ctx, tr, data)
 	default:
 		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
@@ -293,8 +312,16 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteNamespace(ctx, tr, resource.Name, cascade)
 	case KindPriorityClass:
 		return cs.deletePriorityClass(ctx, tr, resource.Name, cascade)
+	case KindAPIService:
+		return cs.deleteAPIService(ctx, tr, resource.Name, cascade)
 	case KindServiceMonitor:
 		return cs.deleteServiceMonitor(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindAlertmanager:
+		return cs.deleteAlertmanager(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindPrometheus:
+		return cs.deletePrometheus(ctx, tr, resourceNamespace, resource.Name, cascade)
+	case KindPrometheusRule:
+		return cs.deletePrometheusRule(ctx, tr, resourceNamespace, resource.Name, cascade)
 	}
 	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
@@ -394,8 +421,16 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusNamespace(ctx, data, uid)
 	case KindPriorityClass:
 		return cs.statusPriorityClass(ctx, data, uid)
+	case KindAPIService:
+		return cs.statusAPIService(ctx, data, uid)
 	case KindServiceMonitor:
 		return cs.statusServiceMonitor(ctx, data, uid)
+	case KindAlertmanager:
+		return cs.statusAlertmanager(ctx, data, uid)
+	case KindPrometheus:
+		return cs.statusPrometheus(ctx, data, uid)
+	case KindPrometheusRule:
+		return cs.statusPrometheusRule(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -763,6 +798,30 @@ func (cs *Changeset) statusCustomResourceDefinition(ctx context.Context, data []
 	return control.Status()
 }
 
+func (cs *Changeset) statusAPIService(ctx context.Context, data []byte, uid string) error {
+	apiService, err := ParseAPIService(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.APIRegistrationClient.ApiregistrationV1().APIServices().Get(apiService.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("api service with UID %v not found", uid)
+		}
+	}
+	control, err := NewAPIServiceControl(APIServiceConfig{
+		APIService: apiService,
+		Client:     cs.APIRegistrationClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
 func (cs *Changeset) statusServiceMonitor(ctx context.Context, data []byte, uid string) error {
 	serviceMonitor, err := ParseServiceMonitor(bytes.NewReader(data))
 	if err != nil {
@@ -780,6 +839,81 @@ func (cs *Changeset) statusServiceMonitor(ctx context.Context, data []byte, uid 
 	}
 	control, err := NewServiceMonitorControl(ServiceMonitorConfig{
 		ServiceMonitor: serviceMonitor,
+		Client:         cs.MonitoringClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusAlertmanager(ctx context.Context, data []byte, uid string) error {
+	alertmanager, err := ParseAlertmanager(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.MonitoringClient.MonitoringV1().Alertmanagers(
+			alertmanager.Namespace).Get(alertmanager.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("alert manager with UID %v not found", uid)
+		}
+	}
+	control, err := NewAlertmanagerControl(AlertmanagerConfig{
+		Alertmanager: alertmanager,
+		Client:       cs.MonitoringClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusPrometheus(ctx context.Context, data []byte, uid string) error {
+	prometheus, err := ParsePrometheus(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.MonitoringClient.MonitoringV1().Prometheuses(
+			prometheus.Namespace).Get(prometheus.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("prometheus with UID %v not found", uid)
+		}
+	}
+	control, err := NewPrometheusControl(PrometheusConfig{
+		Prometheus: prometheus,
+		Client:     cs.MonitoringClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusPrometheusRule(ctx context.Context, data []byte, uid string) error {
+	prometheusRule, err := ParsePrometheusRule(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.MonitoringClient.MonitoringV1().PrometheusRules(
+			prometheusRule.Namespace).Get(prometheusRule.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("prometheus rule with UID %v not found", uid)
+		}
+	}
+	control, err := NewPrometheusRuleControl(PrometheusRuleConfig{
+		PrometheusRule: prometheusRule,
 		Client:         cs.MonitoringClient,
 	})
 	if err != nil {
@@ -994,6 +1128,20 @@ func (cs *Changeset) deletePriorityClass(ctx context.Context, tr *ChangesetResou
 	})
 }
 
+func (cs *Changeset) deleteAPIService(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	apiService, err := cs.APIRegistrationClient.ApiregistrationV1().APIServices().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewAPIServiceControl(APIServiceConfig{APIService: apiService, Client: cs.APIRegistrationClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.APIService, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) deleteServiceMonitor(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	monitor, err := cs.MonitoringClient.MonitoringV1().ServiceMonitors(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -1004,6 +1152,48 @@ func (cs *Changeset) deleteServiceMonitor(ctx context.Context, tr *ChangesetReso
 		return trace.Wrap(err)
 	}
 	return cs.withDeleteOp(ctx, tr, control.ServiceMonitor, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteAlertmanager(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	alertmanager, err := cs.MonitoringClient.MonitoringV1().Alertmanagers(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewAlertmanagerControl(AlertmanagerConfig{Alertmanager: alertmanager, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.Alertmanager, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deletePrometheus(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	prometheus, err := cs.MonitoringClient.MonitoringV1().Prometheuses(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewPrometheusControl(PrometheusConfig{Prometheus: prometheus, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.Prometheus, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deletePrometheusRule(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
+	prometheusRule, err := cs.MonitoringClient.MonitoringV1().PrometheusRules(Namespace(namespace)).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewPrometheusRuleControl(PrometheusRuleConfig{PrometheusRule: prometheusRule, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.PrometheusRule, func() error {
 		return control.Delete(ctx, cascade)
 	})
 }
@@ -1105,8 +1295,16 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertNamespace(ctx, item)
 	case KindPriorityClass:
 		return cs.revertPriorityClass(ctx, item)
+	case KindAPIService:
+		return cs.revertAPIService(ctx, item)
 	case KindServiceMonitor:
 		return cs.revertServiceMonitor(ctx, item)
+	case KindAlertmanager:
+		return cs.revertAlertmanager(ctx, item)
+	case KindPrometheus:
+		return cs.revertPrometheus(ctx, item)
+	case KindPrometheusRule:
+		return cs.revertPrometheusRule(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -1449,6 +1647,29 @@ func (cs *Changeset) revertPriorityClass(ctx context.Context, item *ChangesetIte
 	return control.Upsert(ctx)
 }
 
+func (cs *Changeset) revertAPIService(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	apiService, err := ParseAPIService(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewAPIServiceControl(APIServiceConfig{APIService: apiService, Client: cs.APIRegistrationClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
 func (cs *Changeset) revertServiceMonitor(ctx context.Context, item *ChangesetItem) error {
 	resource := item.From
 	if len(resource) == 0 {
@@ -1459,6 +1680,75 @@ func (cs *Changeset) revertServiceMonitor(ctx context.Context, item *ChangesetIt
 		return trace.Wrap(err)
 	}
 	control, err := NewServiceMonitorControl(ServiceMonitorConfig{ServiceMonitor: monitor, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertAlertmanager(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	alertmanager, err := ParseAlertmanager(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewAlertmanagerControl(AlertmanagerConfig{Alertmanager: alertmanager, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertPrometheus(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	prometheus, err := ParsePrometheus(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewPrometheusControl(PrometheusConfig{Prometheus: prometheus, Client: cs.MonitoringClient})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertPrometheusRule(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	prometheusRule, err := ParsePrometheusRule(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewPrometheusRuleControl(PrometheusRuleConfig{PrometheusRule: prometheusRule, Client: cs.MonitoringClient})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1959,6 +2249,38 @@ func (cs *Changeset) upsertPriorityClass(
 	})
 }
 
+func (cs *Changeset) upsertAPIService(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	apiService, err := ParseAPIService(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":          tr.String(),
+		"api_service": fmt.Sprintf("%v/%v", apiService.Namespace, apiService.Name),
+	})
+	log.Infof("upsert api service %v", formatMeta(apiService.ObjectMeta))
+	client := cs.APIRegistrationClient.ApiregistrationV1().APIServices()
+	current, err := client.Get(apiService.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing api service not found")
+		current = nil
+	}
+	control, err := NewAPIServiceControl(APIServiceConfig{APIService: apiService, Client: cs.APIRegistrationClient})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaAPIService(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.APIService, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
 func (cs *Changeset) upsertServiceMonitor(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
 	monitor, err := ParseServiceMonitor(bytes.NewReader(data))
 	if err != nil {
@@ -1987,6 +2309,102 @@ func (cs *Changeset) upsertServiceMonitor(ctx context.Context, tr *ChangesetReso
 		updateTypeMetaServiceMonitor(current)
 	}
 	return cs.withUpsertOp(ctx, tr, current, control.ServiceMonitor, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertAlertmanager(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	alertmanager, err := ParseAlertmanager(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":            tr.String(),
+		"alert_manager": fmt.Sprintf("%v/%v", alertmanager.Namespace, alertmanager.Name),
+	})
+	log.Infof("upsert alert manager %v", formatMeta(alertmanager.ObjectMeta))
+	client := cs.MonitoringClient.MonitoringV1().Alertmanagers(alertmanager.Namespace)
+	current, err := client.Get(alertmanager.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing alert manager not found")
+		current = nil
+	}
+	control, err := NewAlertmanagerControl(AlertmanagerConfig{Alertmanager: alertmanager, Client: cs.MonitoringClient})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaAlertmanager(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.Alertmanager, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertPrometheus(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	prometheus, err := ParsePrometheus(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":         tr.String(),
+		"prometheus": fmt.Sprintf("%v/%v", prometheus.Namespace, prometheus.Name),
+	})
+	log.Infof("upsert prometheus %v", formatMeta(prometheus.ObjectMeta))
+	client := cs.MonitoringClient.MonitoringV1().Prometheuses(prometheus.Namespace)
+	current, err := client.Get(prometheus.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing prometheus not found")
+		current = nil
+	}
+	control, err := NewPrometheusControl(PrometheusConfig{Prometheus: prometheus, Client: cs.MonitoringClient})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaPrometheus(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.Prometheus, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertPrometheusRule(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	prometheusRule, err := ParsePrometheusRule(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":              tr.String(),
+		"prometheus_rule": fmt.Sprintf("%v/%v", prometheusRule.Namespace, prometheusRule.Name),
+	})
+	log.Infof("upsert prometheus rule %v", formatMeta(prometheusRule.ObjectMeta))
+	client := cs.MonitoringClient.MonitoringV1().PrometheusRules(prometheusRule.Namespace)
+	current, err := client.Get(prometheusRule.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing prometheus rule not found")
+		current = nil
+	}
+	control, err := NewPrometheusRuleControl(PrometheusRuleConfig{PrometheusRule: prometheusRule, Client: cs.MonitoringClient})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaPrometheusRule(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.PrometheusRule, func() error {
 		return control.Upsert(ctx)
 	})
 }
