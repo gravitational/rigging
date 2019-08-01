@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2019 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,12 +16,18 @@ limitations under the License.
 
 package v1beta1
 
-import "k8s.io/apimachinery/pkg/conversion"
+import (
+	"k8s.io/apimachinery/pkg/runtime"
+	utilpointer "k8s.io/utils/pointer"
+)
 
-// Convert_Slice_string_To_v1beta1_IncludeObjectPolicy allows converting a URL query parameter value
-func Convert_Slice_string_To_v1beta1_IncludeObjectPolicy(input *[]string, out *IncludeObjectPolicy, s conversion.Scope) error {
-	if len(*input) > 0 {
-		*out = IncludeObjectPolicy((*input)[0])
+func addDefaultingFuncs(scheme *runtime.Scheme) error {
+	return RegisterDefaults(scheme)
+}
+
+// SetDefaults_ServiceReference sets defaults for AuditSync Webhook's ServiceReference
+func SetDefaults_ServiceReference(obj *ServiceReference) {
+	if obj.Port == nil {
+		obj.Port = utilpointer.Int32Ptr(443)
 	}
-	return nil
 }
