@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2019 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,10 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +k8s:deepcopy-gen=package
-// +k8s:openapi-gen=true
-// +k8s:defaulter-gen=TypeMeta
+package v1
 
-// +groupName=meta.k8s.io
+import (
+	"k8s.io/apimachinery/pkg/runtime"
+	utilpointer "k8s.io/utils/pointer"
+)
 
-package v1beta1 // import "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
+func addDefaultingFuncs(scheme *runtime.Scheme) error {
+	return RegisterDefaults(scheme)
+}
+
+// SetDefaults_ServiceReference sets defaults for AuditSync Webhook's ServiceReference
+func SetDefaults_ServiceReference(obj *ServiceReference) {
+	if obj.Port == nil {
+		obj.Port = utilpointer.Int32Ptr(443)
+	}
+}
