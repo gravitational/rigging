@@ -35,23 +35,23 @@
 
 [[constraint]]
   name = "k8s.io/apiextensions-apiserver"
-  version = "kubernetes-1.15.1"
+  version = "kubernetes-1.15.4"
 
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.15.1"
+  version = "kubernetes-1.15.4"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.15.1"
+  version = "kubernetes-1.15.4"
 
 [[override]]
   name = "k8s.io/kube-aggregator"
-  version = "kubernetes-1.15.1"
+  version = "kubernetes-1.15.4"
 
 [[constraint]]
   name = "k8s.io/client-go"
-  version = "=v12.0.0"
+  version = "kubernetes-1.15.4"
 
 [[override]]
   name = "gopkg.in/yaml.v2"
@@ -59,7 +59,7 @@
 
 [[constraint]]
   name = "github.com/coreos/prometheus-operator"
-  version = "=v0.30.0"
+  version = "=v0.30.1"
 
 [[override]]
 name = "cloud.google.com/go"
