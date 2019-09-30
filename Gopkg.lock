@@ -396,7 +396,7 @@
   version = "kubernetes-1.13.11"
 
 [[projects]]
-  digest = "1:20f641257f6c0c69ddf455a15b63b20bac524b08d90745da796d633724758bac"
+  digest = "1:d0e0162c76deffc2adcd4a94aa17ce4c8aa6d2bbfa0a603de66cb1d7ec47abe1"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -456,8 +456,8 @@
     "util/integer",
   ]
   pruneopts = "UT"
-  revision = "e64494209f554a6723674bd494d69445fb76a1d4"
-  version = "v10.0.0"
+  revision = "ee6c071a42cffd19361fc3f4ca995829328a0678"
+  version = "kubernetes-1.13.11"
 
 [[projects]]
   digest = "1:e2999bf1bb6eddc2a6aa03fe5e6629120a53088926520ca3b4765f77d7ff7eab"
