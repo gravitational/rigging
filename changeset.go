@@ -26,6 +26,7 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoring "github.com/coreos/prometheus-operator/pkg/client/versioned"
+	monitoring_scheme "github.com/coreos/prometheus-operator/pkg/client/versioned/scheme"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
@@ -34,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
@@ -76,7 +76,7 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 		cfg.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
-	cfg.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	cfg.NegotiatedSerializer = monitoring_scheme.Codecs.WithoutConversion()
 	cfg.GroupVersion = &schema.GroupVersion{Group: ChangesetGroup, Version: ChangesetVersion}
 
 	clt, err := rest.RESTClientFor(&cfg)
