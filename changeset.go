@@ -2446,9 +2446,8 @@ func (cs *Changeset) upsertMutatingWebhookConfiguration(ctx context.Context, tr 
 	log.Infof("upsert mutating webhook configuration %v", formatMeta(webhook.ObjectMeta))
 	client := cs.Client.AdmissionregistrationV1().MutatingWebhookConfigurations()
 	current, err := client.Get(webhook.Name, metav1.GetOptions{})
-	err = ConvertError(err)
 	if err != nil {
-		if !trace.IsNotFound(err) {
+		if !trace.IsNotFound(ConvertError(err)) {
 			return nil, trace.Wrap(err)
 		}
 		log.Debug("existing mutating webhook configuration not found")

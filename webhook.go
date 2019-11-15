@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/client-go/kubernetes/typed/admissionregistration/v1"
 )
 
-// NewValidatingWebhookConfigurationControl create control service for
+// NewValidatingWebhookConfigurationControl creates control service for
 // ValidatingWebhookConfiguration resouces.
 func NewValidatingWebhookConfigurationControl(config ValidatingWebhookConfigurationConfig) (*ValidatingWebhookConfigurationControl, error) {
 	if err := config.CheckAndSetDefaults(); err != nil {
@@ -34,7 +34,7 @@ func NewValidatingWebhookConfigurationControl(config ValidatingWebhookConfigurat
 	return &ValidatingWebhookConfigurationControl{
 		ValidatingWebhookConfigurationConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"validatingWebhookConfiguration": formatMeta(config.ObjectMeta),
+			"validating_webhook_configuration": formatMeta(config.ObjectMeta),
 		}),
 	}, nil
 }
@@ -100,7 +100,7 @@ func (c *ValidatingWebhookConfigurationControl) client() v1.ValidatingWebhookCon
 	return c.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations()
 }
 
-// NewMutatingWebhookConfigurationControl create control service for
+// NewMutatingWebhookConfigurationControl creates control service for
 // MutatingWebhookConfiguration resouces.
 func NewMutatingWebhookConfigurationControl(config MutatingWebhookConfigurationConfig) (*MutatingWebhookConfigurationControl, error) {
 	if err := config.CheckAndSetDefaults(); err != nil {
@@ -109,7 +109,7 @@ func NewMutatingWebhookConfigurationControl(config MutatingWebhookConfigurationC
 	return &MutatingWebhookConfigurationControl{
 		MutatingWebhookConfigurationConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"mutatingWebhookConfiguration": formatMeta(config.ObjectMeta),
+			"mutating_webhook_configuration": formatMeta(config.ObjectMeta),
 		}),
 	}, nil
 }
