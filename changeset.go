@@ -194,6 +194,10 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertNamespace(ctx, tr, data)
 	case KindPriorityClass:
 		_, err = cs.upsertPriorityClass(ctx, tr, data)
+	case KindValidatingWebhookConfiguration:
+		_, err = cs.upsertValidatingWebhookConfiguration(ctx, tr, data)
+	case KindMutatingWebhookConfiguration:
+		_, err = cs.upsertMutatingWebhookConfiguration(ctx, tr, data)
 	case KindAPIService:
 		_, err = cs.upsertAPIService(ctx, tr, data)
 	case KindServiceMonitor:
@@ -312,6 +316,10 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteNamespace(ctx, tr, resource.Name, cascade)
 	case KindPriorityClass:
 		return cs.deletePriorityClass(ctx, tr, resource.Name, cascade)
+	case KindValidatingWebhookConfiguration:
+		return cs.deleteValidatingWebhookConfiguration(ctx, tr, resource.Name, cascade)
+	case KindMutatingWebhookConfiguration:
+		return cs.deleteMutatingWebhookConfiguration(ctx, tr, resource.Name, cascade)
 	case KindAPIService:
 		return cs.deleteAPIService(ctx, tr, resource.Name, cascade)
 	case KindServiceMonitor:
@@ -421,6 +429,10 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusNamespace(ctx, data, uid)
 	case KindPriorityClass:
 		return cs.statusPriorityClass(ctx, data, uid)
+	case KindValidatingWebhookConfiguration:
+		return cs.statusValidatingWebhookConfiguration(ctx, data, uid)
+	case KindMutatingWebhookConfiguration:
+		return cs.statusMutatingWebhookConfiguration(ctx, data, uid)
 	case KindAPIService:
 		return cs.statusAPIService(ctx, data, uid)
 	case KindServiceMonitor:
@@ -1377,6 +1389,10 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertNamespace(ctx, item)
 	case KindPriorityClass:
 		return cs.revertPriorityClass(ctx, item)
+	case KindValidatingWebhookConfiguration:
+		return cs.revertValidatingWebhookConfiguration(ctx, item)
+	case KindMutatingWebhookConfiguration:
+		return cs.revertMutatingWebhookConfiguration(ctx, item)
 	case KindAPIService:
 		return cs.revertAPIService(ctx, item)
 	case KindServiceMonitor:
