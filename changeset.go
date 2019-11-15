@@ -194,6 +194,10 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertNamespace(ctx, tr, data)
 	case KindPriorityClass:
 		_, err = cs.upsertPriorityClass(ctx, tr, data)
+	case KindValidatingWebhookConfiguration:
+		_, err = cs.upsertValidatingWebhookConfiguration(ctx, tr, data)
+	case KindMutatingWebhookConfiguration:
+		_, err = cs.upsertMutatingWebhookConfiguration(ctx, tr, data)
 	case KindAPIService:
 		_, err = cs.upsertAPIService(ctx, tr, data)
 	case KindServiceMonitor:
@@ -312,6 +316,10 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteNamespace(ctx, tr, resource.Name, cascade)
 	case KindPriorityClass:
 		return cs.deletePriorityClass(ctx, tr, resource.Name, cascade)
+	case KindValidatingWebhookConfiguration:
+		return cs.deleteValidatingWebhookConfiguration(ctx, tr, resource.Name, cascade)
+	case KindMutatingWebhookConfiguration:
+		return cs.deleteMutatingWebhookConfiguration(ctx, tr, resource.Name, cascade)
 	case KindAPIService:
 		return cs.deleteAPIService(ctx, tr, resource.Name, cascade)
 	case KindServiceMonitor:
@@ -421,6 +429,10 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusNamespace(ctx, data, uid)
 	case KindPriorityClass:
 		return cs.statusPriorityClass(ctx, data, uid)
+	case KindValidatingWebhookConfiguration:
+		return cs.statusValidatingWebhookConfiguration(ctx, data, uid)
+	case KindMutatingWebhookConfiguration:
+		return cs.statusMutatingWebhookConfiguration(ctx, data, uid)
 	case KindAPIService:
 		return cs.statusAPIService(ctx, data, uid)
 	case KindServiceMonitor:
@@ -798,6 +810,54 @@ func (cs *Changeset) statusCustomResourceDefinition(ctx context.Context, data []
 	return control.Status()
 }
 
+func (cs *Changeset) statusValidatingWebhookConfiguration(ctx context.Context, data []byte, uid string) error {
+	webhook, err := ParseValidatingWebhookConfiguration(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(webhook.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("validating webhook configuration with UID %v not found", uid)
+		}
+	}
+	control, err := NewValidatingWebhookConfigurationControl(ValidatingWebhookConfigurationConfig{
+		ValidatingWebhookConfiguration: webhook,
+		Client:                         cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusMutatingWebhookConfiguration(ctx context.Context, data []byte, uid string) error {
+	webhook, err := ParseMutatingWebhookConfiguration(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(webhook.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("mutating webhook configuration with UID %v not found", uid)
+		}
+	}
+	control, err := NewMutatingWebhookConfigurationControl(MutatingWebhookConfigurationConfig{
+		MutatingWebhookConfiguration: webhook,
+		Client:                       cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
 func (cs *Changeset) statusAPIService(ctx context.Context, data []byte, uid string) error {
 	apiService, err := ParseAPIService(bytes.NewReader(data))
 	if err != nil {
@@ -1128,6 +1188,40 @@ func (cs *Changeset) deletePriorityClass(ctx context.Context, tr *ChangesetResou
 	})
 }
 
+func (cs *Changeset) deleteValidatingWebhookConfiguration(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	webhook, err := cs.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewValidatingWebhookConfigurationControl(ValidatingWebhookConfigurationConfig{
+		ValidatingWebhookConfiguration: webhook,
+		Client:                         cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.ValidatingWebhookConfiguration, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deleteMutatingWebhookConfiguration(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	webhook, err := cs.Client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewMutatingWebhookConfigurationControl(MutatingWebhookConfigurationConfig{
+		MutatingWebhookConfiguration: webhook,
+		Client:                       cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.MutatingWebhookConfiguration, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) deleteAPIService(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
 	apiService, err := cs.APIRegistrationClient.ApiregistrationV1().APIServices().Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -1295,6 +1389,10 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertNamespace(ctx, item)
 	case KindPriorityClass:
 		return cs.revertPriorityClass(ctx, item)
+	case KindValidatingWebhookConfiguration:
+		return cs.revertValidatingWebhookConfiguration(ctx, item)
+	case KindMutatingWebhookConfiguration:
+		return cs.revertMutatingWebhookConfiguration(ctx, item)
 	case KindAPIService:
 		return cs.revertAPIService(ctx, item)
 	case KindServiceMonitor:
@@ -1644,6 +1742,58 @@ func (cs *Changeset) revertPriorityClass(ctx context.Context, item *ChangesetIte
 		return trace.Wrap(err)
 	}
 	// this operation either created or updated the resource, so we create a new version
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertValidatingWebhookConfiguration(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	webhook, err := ParseValidatingWebhookConfiguration(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewValidatingWebhookConfigurationControl(ValidatingWebhookConfigurationConfig{
+		ValidatingWebhookConfiguration: webhook,
+		Client:                         cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertMutatingWebhookConfiguration(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	webhook, err := ParseMutatingWebhookConfiguration(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewMutatingWebhookConfigurationControl(MutatingWebhookConfigurationConfig{
+		MutatingWebhookConfiguration: webhook,
+		Client:                       cs.Client,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
 	return control.Upsert(ctx)
 }
 
@@ -2245,6 +2395,75 @@ func (cs *Changeset) upsertPriorityClass(
 		updateTypeMetaPriorityClass(current)
 	}
 	return cs.withUpsertOp(ctx, tr, current, control.PriorityClass, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertValidatingWebhookConfiguration(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	webhook, err := ParseValidatingWebhookConfiguration(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":                               tr.String(),
+		"validating_webhook_configuration": fmt.Sprintf("%v/%v", webhook.Namespace, webhook.Name),
+	})
+	log.Infof("upsert validating webhook configuration %v", formatMeta(webhook.ObjectMeta))
+	client := cs.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations()
+	current, err := client.Get(webhook.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing validating webhook configuration not found")
+		current = nil
+	}
+	control, err := NewValidatingWebhookConfigurationControl(ValidatingWebhookConfigurationConfig{
+		ValidatingWebhookConfiguration: webhook,
+		Client:                         cs.Client,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaValidatingWebhookConfiguration(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.ValidatingWebhookConfiguration, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertMutatingWebhookConfiguration(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	webhook, err := ParseMutatingWebhookConfiguration(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":                             tr.String(),
+		"mutating_webhook_configuration": fmt.Sprintf("%v/%v", webhook.Namespace, webhook.Name),
+	})
+	log.Infof("upsert mutating webhook configuration %v", formatMeta(webhook.ObjectMeta))
+	client := cs.Client.AdmissionregistrationV1().MutatingWebhookConfigurations()
+	current, err := client.Get(webhook.Name, metav1.GetOptions{})
+	if err != nil {
+		if !trace.IsNotFound(ConvertError(err)) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing mutating webhook configuration not found")
+		current = nil
+	}
+	control, err := NewMutatingWebhookConfigurationControl(MutatingWebhookConfigurationConfig{
+		MutatingWebhookConfiguration: webhook,
+		Client:                       cs.Client,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaMutatingWebhookConfiguration(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.MutatingWebhookConfiguration, func() error {
 		return control.Upsert(ctx)
 	})
 }
