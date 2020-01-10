@@ -197,6 +197,11 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	committed, _ := cs.IsCommitted(ctx, namespace, changeset.Name)
+	if committed {
+		// Nothing to do
+		return nil
+	}
 	err = cs.Freeze(ctx, namespace, changeset.Name)
 	if err != nil {
 		return trace.Wrap(err)
@@ -232,14 +237,19 @@ func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
-	configMap, err := rigging.GenerateConfigMap(configMapName, configMapNamespace, files, literals)
-	if err != nil {
-		return trace.Wrap(err)
-	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
 		Client: client,
 		Config: config,
 	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	committed, _ := cs.IsCommitted(ctx, changesetNamespace, changeset.Name)
+	if committed {
+		// Nothing to do
+		return nil
+	}
+	configMap, err := rigging.GenerateConfigMap(configMapName, configMapNamespace, files, literals)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -269,6 +279,11 @@ func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	})
 	if err != nil {
 		return trace.Wrap(err)
+	}
+	committed, _ := cs.IsCommitted(ctx, namespace, changeset.Name)
+	if committed {
+		// Nothing to do
+		return nil
 	}
 	err = cs.Upsert(ctx, namespace, changeset.Name, data)
 	if err != nil {
