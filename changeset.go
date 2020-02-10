@@ -113,8 +113,7 @@ func NewChangeset(ctx context.Context, config ChangesetConfig) (*Changeset, erro
 	return cs, nil
 }
 
-// Changeset is a is a collection changeset log that can revert a series of
-// changes to the system
+// Changeset manages changes to a series of Kubernetes resources
 type Changeset struct {
 	ChangesetConfig
 	client *rest.RESTClient
@@ -208,6 +207,18 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
 	return err
+}
+
+// IsCommitted returns whether this changeset has already been committed
+func (cs *Changeset) IsCommitted(ctx context.Context, changesetNamespace, changesetName string) (completed bool, err error) {
+	res, err := cs.get(changesetNamespace, changesetName)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	if res.Spec.Status != ChangesetStatusCommitted {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Status checks all statuses for all resources updated or added in the context of a given changeset

@@ -15,7 +15,7 @@ build:
 
 .PHONY: test
 test:
-	go test -v -test.parallel=0 ./ ./tool/...
+	go test -v -test.parallel=1 ./ ./tool/...
 
 BUILDBOX := quay.io/gravitational/debian-venti:go1.12.9-buster
 
@@ -60,7 +60,6 @@ docker-image:
 .PHONY: publish-docker-image
 publish-docker-image:
 	docker push $(IMAGE)
-
 
 .PHONY: print-image
 print-image:
