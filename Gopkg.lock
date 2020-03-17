@@ -145,12 +145,12 @@
   version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:22c8951489f0e27ec3b2d50d9f74086ff3f08554ce5965d418d6a10296b9ea04"
+  digest = "1:dc84545f9f2a442b14864f2f7e54ae556cae53bd437a05a456572fea9e73cc87"
   name = "github.com/gravitational/trace"
   packages = ["."]
   pruneopts = "UT"
-  revision = "4a5e142f3251b3a98e8fd71c2a32eb225af06b6d"
+  revision = "dd5b2e8eae86d31f6273ff3ac46d5b15edd6d6be"
+  version = "1.1.10"
 
 [[projects]]
   digest = "1:8eb1de8112c9924d59bf1d3e5c26f5eaa2bfc2a5fcbb92dc1c2e4546d695f277"
@@ -349,7 +349,7 @@
   version = "v2.2.2"
 
 [[projects]]
-  digest = "1:274e6b4fd11a6a01212ee6af5ba488c7623f5eaa7339d3bb5642220d96ee8744"
+  digest = "1:cd7322a2669aba7fe506383dc31ece3881fc3e39ccac5334360c50f946a8ade4"
   name = "k8s.io/api"
   packages = [
     "admissionregistration/v1",
@@ -373,8 +373,10 @@
     "coordination/v1beta1",
     "core/v1",
     "discovery/v1alpha1",
+    "discovery/v1beta1",
     "events/v1beta1",
     "extensions/v1beta1",
+    "flowcontrol/v1alpha1",
     "networking/v1",
     "networking/v1beta1",
     "node/v1alpha1",
@@ -392,11 +394,11 @@
     "storage/v1beta1",
   ]
   pruneopts = "UT"
-  revision = "35e52d86657aba06859dd22099bfa14faf1effb2"
-  version = "kubernetes-1.16.2"
+  revision = "ef0cd3ac5f239dcd07b58dc7f6f0698d7aa74efd"
+  version = "kubernetes-1.17.3"
 
 [[projects]]
-  digest = "1:5750bbcf3051ea23b48bfb39a43f20e0af7a0be569169b916bf2fcb016ede393"
+  digest = "1:f0b431fe72d7510dfe7f3f177317391621ddb500843f5661dab7520d22735a66"
   name = "k8s.io/apiextensions-apiserver"
   packages = [
     "pkg/apis/apiextensions",
@@ -408,11 +410,11 @@
     "pkg/client/clientset/clientset/typed/apiextensions/v1beta1",
   ]
   pruneopts = "UT"
-  revision = "5357c4baaf6562e4d37c9afc9fef99bd16d76a9f"
-  version = "kubernetes-1.16.2"
+  revision = "ee42d6166f481443ff2894b657bc866d6145d3aa"
+  version = "kubernetes-1.17.3"
 
 [[projects]]
-  digest = "1:d6c183dca87f8d7a7199e1980c67e377093f6f73eed26751245336e350992319"
+  digest = "1:9dfc99ab8c2bf85bbffc5d6e37ce7d6e624f8d12eb39ddd1d3d704bb1dc75d9d"
   name = "k8s.io/apimachinery"
   packages = [
     "pkg/api/equality",
@@ -453,11 +455,11 @@
     "third_party/forked/golang/reflect",
   ]
   pruneopts = "UT"
-  revision = "a2eda9f80ab8a454a81bdde16d62a1afe5f931c0"
-  version = "kubernetes-1.16.2"
+  revision = "731dcecc205498f52a21b12e311af095efb4b188"
+  version = "kubernetes-1.17.3"
 
 [[projects]]
-  digest = "1:2744e19eaa390761c70a9836be95f53675aa71a31f22a747386d1c3e34ad975c"
+  digest = "1:17f6827bfb5193011ad024e1a85148a4d6692fce70dfe6ca41a21dc5cf0dbbd6"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -484,8 +486,10 @@
     "kubernetes/typed/coordination/v1beta1",
     "kubernetes/typed/core/v1",
     "kubernetes/typed/discovery/v1alpha1",
+    "kubernetes/typed/discovery/v1beta1",
     "kubernetes/typed/events/v1beta1",
     "kubernetes/typed/extensions/v1beta1",
+    "kubernetes/typed/flowcontrol/v1alpha1",
     "kubernetes/typed/networking/v1",
     "kubernetes/typed/networking/v1beta1",
     "kubernetes/typed/node/v1alpha1",
@@ -523,8 +527,8 @@
     "util/keyutil",
   ]
   pruneopts = "UT"
-  revision = "bec269661e48cb1e5fbb0d037f356ffe9e9978a0"
-  version = "kubernetes-1.16.2"
+  revision = "ae93ed28af1516427c76ef4e784b9ba231664e0f"
+  version = "kubernetes-1.17.3"
 
 [[projects]]
   digest = "1:e2999bf1bb6eddc2a6aa03fe5e6629120a53088926520ca3b4765f77d7ff7eab"
@@ -547,8 +551,8 @@
     "pkg/client/clientset_generated/clientset/typed/apiregistration/v1beta1",
   ]
   pruneopts = "UT"
-  revision = "9587704a8ad47275684f38d0be237504ee7d1ae3"
-  version = "kubernetes-1.16.2"
+  revision = "868b252459694d5e765eb1f329a2718bee9a4159"
+  version = "kubernetes-1.17.3"
 
 [[projects]]
   digest = "1:615bb3fa3f173904665d6f962b5017ebe9a867877cafe1c8d792f7fb46988bf3"
@@ -582,6 +586,7 @@
   input-imports = [
     "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1",
     "github.com/coreos/prometheus-operator/pkg/client/versioned",
+    "github.com/coreos/prometheus-operator/pkg/client/versioned/scheme",
     "github.com/davecgh/go-spew/spew",
     "github.com/ghodss/yaml",
     "github.com/gravitational/trace",
@@ -590,6 +595,7 @@
     "github.com/sirupsen/logrus/hooks/syslog",
     "gopkg.in/alecthomas/kingpin.v2",
     "gopkg.in/check.v1",
+    "k8s.io/api/admissionregistration/v1",
     "k8s.io/api/apps/v1",
     "k8s.io/api/batch/v1",
     "k8s.io/api/core/v1",
@@ -603,12 +609,12 @@
     "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
-    "k8s.io/apimachinery/pkg/runtime/serializer",
     "k8s.io/apimachinery/pkg/util/runtime",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/apimachinery/pkg/util/yaml",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/scheme",
+    "k8s.io/client-go/kubernetes/typed/admissionregistration/v1",
     "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/clientcmd",
