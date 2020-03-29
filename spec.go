@@ -48,7 +48,7 @@ func (tr *ChangesetResource) GetObjectKind() schema.ObjectKind {
 }
 
 func (tr *ChangesetResource) String() string {
-	return fmt.Sprintf("namespace=%v, name=%v, operations=%v)", tr.Namespace, tr.Name, len(tr.Spec.Items))
+	return fmt.Sprintf("(namespace=%v, name=%v, operations=%v)", tr.Namespace, tr.Name, len(tr.Spec.Items))
 }
 
 type ChangesetSpec struct {
@@ -57,6 +57,8 @@ type ChangesetSpec struct {
 }
 
 type ChangesetItem struct {
+	// ID represents unique identification for changing operation
+	ID                string    `json:"id"`
 	From              string    `json:"from"`
 	To                string    `json:"to"`
 	UID               string    `json:"uid"`
