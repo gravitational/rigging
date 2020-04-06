@@ -36,7 +36,7 @@ func NewDaemonSetControl(config DSConfig) (*DSControl, error) {
 	return &DSControl{
 		DSConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"daemonset": formatMeta(config.ObjectMeta),
+			"daemonset": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -80,7 +80,7 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 }
 
 func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.DaemonSet.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.DaemonSet.ObjectMeta, c.DaemonSet.TypeMeta))
 
 	daemons := c.Client.ExtensionsV1beta1().DaemonSets(c.DaemonSet.Namespace)
 	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
@@ -117,7 +117,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *DSControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.DaemonSet.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.DaemonSet.ObjectMeta, c.DaemonSet.TypeMeta))
 
 	daemons := c.Client.Apps().DaemonSets(c.DaemonSet.Namespace)
 	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})

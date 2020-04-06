@@ -34,13 +34,13 @@ func NewJobControl(config JobConfig) (*JobControl, error) {
 	return &JobControl{
 		JobConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"job": formatMeta(config.Job.ObjectMeta),
+			"job": formatMeta(config.Job.ObjectMeta, config.Job.TypeMeta),
 		}),
 	}, nil
 }
 
 func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.Job.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.Job.ObjectMeta, c.Job.TypeMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
 	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
@@ -79,7 +79,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *JobControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.Job.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.Job.ObjectMeta, c.Job.TypeMeta))
 
 	jobs := c.Batch().Jobs(c.Job.Namespace)
 	currentJob, err := jobs.Get(c.Job.Name, metav1.GetOptions{})
@@ -145,7 +145,7 @@ func (c *JobControl) Status() error {
 
 	if !complete {
 		return trace.CompareFailed("job %v not yet complete (succeeded: %v, active: %v)",
-			formatMeta(job.ObjectMeta), succeeded, active)
+			formatMeta(job.ObjectMeta, job.TypeMeta), succeeded, active)
 	}
 	return nil
 }

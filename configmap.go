@@ -33,7 +33,7 @@ func NewConfigMapControl(config ConfigMapConfig) (*ConfigMapControl, error) {
 	return &ConfigMapControl{
 		ConfigMapConfig: config,
 		Entry: log.WithFields(log.Fields{
-			"configMap": formatMeta(config.ObjectMeta),
+			"configMap": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type ConfigMapControl struct {
 }
 
 func (c *ConfigMapControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ConfigMap.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ConfigMap.ObjectMeta, c.ConfigMap.TypeMeta))
 
 	err := c.Client.Core().ConfigMaps(c.ConfigMap.Namespace).Delete(c.ConfigMap.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ConfigMapControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ConfigMap.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ConfigMap.ObjectMeta, c.ConfigMap.TypeMeta))
 
 	configMaps := c.Client.Core().ConfigMaps(c.ConfigMap.Namespace)
 	c.ConfigMap.UID = ""

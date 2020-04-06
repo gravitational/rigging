@@ -57,10 +57,9 @@ type ChangesetSpec struct {
 }
 
 type ChangesetItem struct {
-	// ID represents unique identification for changing operation
-	ID                string    `json:"id"`
-	From              string    `json:"from"`
-	To                string    `json:"to"`
+	From string `json:"from"`
+	To   string `json:"to"`
+	// UID represents unique identifier for changing operation
 	UID               string    `json:"uid"`
 	Status            string    `json:"status"`
 	CreationTimestamp time.Time `json:"time"`
@@ -83,13 +82,13 @@ func (o *OperationInfo) Kind() string {
 
 func (o *OperationInfo) String() string {
 	if o.From != nil && o.To == nil {
-		return fmt.Sprintf("delete %v %v", o.From.Kind, formatMeta(o.From.ObjectMeta))
+		return fmt.Sprintf("delete %v %v", o.From.Kind, formatMeta(o.From.ObjectMeta, o.From.TypeMeta))
 	}
 	if o.From != nil && o.To != nil {
-		return fmt.Sprintf("update %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta))
+		return fmt.Sprintf("update %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta, o.To.TypeMeta))
 	}
 	if o.From == nil && o.To != nil {
-		return fmt.Sprintf("upsert %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta))
+		return fmt.Sprintf("upsert %v %v", o.To.Kind, formatMeta(o.To.ObjectMeta, o.To.TypeMeta))
 	}
 	return "invalid operation: both resources cannot be empty"
 }

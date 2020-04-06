@@ -33,7 +33,7 @@ func NewPodSecurityPolicyControl(config PodSecurityPolicyConfig) (*PodSecurityPo
 	return &PodSecurityPolicyControl{
 		PodSecurityPolicyConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"podsecuritypolicy": formatMeta(config.ObjectMeta),
+			"podsecuritypolicy": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type PodSecurityPolicyControl struct {
 }
 
 func (c *PodSecurityPolicyControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.ExtensionsV1beta1().PodSecurityPolicies().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	policies := c.Client.ExtensionsV1beta1().PodSecurityPolicies()
 	c.UID = ""
@@ -85,7 +85,7 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = policies.Create(c.PodSecurityPolicy)
-		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta, c.TypeMeta))
 	}
 	_, err = policies.Update(c.PodSecurityPolicy)
 	return ConvertError(err)

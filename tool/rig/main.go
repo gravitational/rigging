@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"log/syslog"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -49,7 +47,7 @@ func run(quiet *bool) error {
 		cupsert          = app.Command("upsert", "Upsert resources in the context of a changeset")
 		cupsertChangeset = Ref(cupsert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
 		cupsertFile      = cupsert.Flag("file", "file with new resource spec").Short('f').Required().String()
-		cupsertID        = cupsert.Flag("id", "ID of a operation in changeset").String()
+		cupsertForce     = cupsert.Flag("force", "Ignore error if resource is already updated").Bool()
 
 		cupsertConfigMap          = app.Command("configmap", "Upsert configmap in the context of a changeset")
 		cupsertConfigMapChangeset = Ref(cupsertConfigMap.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
@@ -57,7 +55,7 @@ func run(quiet *bool) error {
 		cupsertConfigMapNamespace = cupsertConfigMap.Flag("resource-namespace", "ConfigMap namespace").Default(rigging.DefaultNamespace).String()
 		cupsertConfigMapFiles     = cupsertConfigMap.Flag("from-file", "files or directories with contents").Strings()
 		cupsertConfigMapLiterals  = cupsertConfigMap.Flag("from-literal", "literals in form of key=val").Strings()
-		cupsertConfigMapID        = cupsertConfigMap.Flag("id", "ID of a operation in changeset").String()
+		cupsertConfigMapForce     = cupsertConfigMap.Flag("force", "Ignore error if resource is already updated").Bool()
 
 		cstatus         = app.Command("status", "Check status of all operations in a changeset")
 		cstatusResource = Ref(cstatus.Arg("resource", "resource to check, e.g. tx/tx1").Required())
@@ -76,6 +74,7 @@ func run(quiet *bool) error {
 
 		crevert          = app.Command("revert", "Revert the changeset")
 		crevertChangeset = Ref(crevert.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
+		crevertUID       = crevert.Flag("uid", "ID of the specific operation to revert").String()
 
 		cfreeze          = app.Command("freeze", "Freeze the changeset")
 		cfreezeChangeset = Ref(cfreeze.Flag("changeset", "name of the changeset").Short('c').Envar(changesetEnvVar).Required())
@@ -86,7 +85,6 @@ func run(quiet *bool) error {
 		cdeleteChangeset         = Ref(cdelete.Flag("changeset", "Changeset name").Short('c').Envar(changesetEnvVar).Required())
 		cdeleteResource          = Ref(cdelete.Arg("resource", "Resource name to delete").Required())
 		cdeleteResourceNamespace = cdelete.Flag("resource-namespace", "Resource namespace").Default(rigging.DefaultNamespace).String()
-		cdeleteID                = cdelete.Flag("id", "ID of a operation in changeset").String()
 	)
 	app.Flag("quiet", "Suppress program output").Short('q').BoolVar(quiet)
 
@@ -123,29 +121,21 @@ func run(quiet *bool) error {
 
 	switch cmd {
 	case cupsert.FullCommand():
-		if *cupsertID == "" {
-			// Concatenate all arguments and take MD5 from it as an ID
-			*cupsertID = fmt.Sprintf("%x", md5.Sum([]byte(strings.Join(os.Args[1:], ""))))
-		}
-		return upsert(ctx, client, config, *namespace, *cupsertChangeset, *cupsertFile, *cupsertID)
+		return upsert(ctx, client, config, *namespace, *cupsertChangeset, *cupsertFile, *cupsertForce)
 	case cstatus.FullCommand():
 		return status(ctx, client, config, *namespace, *cstatusResource, *cstatusAttempts, *cstatusPeriod)
 	case cget.FullCommand():
 		return get(ctx, client, config, *namespace, *cgetChangeset, *cgetOut)
 	case cdelete.FullCommand():
-		if *cdeleteID == "" {
-			// Concatenate all arguments and take MD5 from it as an ID
-			*cdeleteID = fmt.Sprintf("%x", md5.Sum([]byte(strings.Join(os.Args[1:], ""))))
-		}
-		return deleteResource(ctx, client, config, *namespace, *cdeleteID, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade, *cdeleteForce)
+		return deleteResource(ctx, client, config, *namespace, *cdeleteChangeset, *cdeleteResourceNamespace, *cdeleteResource, *cdeleteCascade, *cdeleteForce)
 	case ctrDelete.FullCommand():
 		return csDelete(ctx, client, config, *namespace, *ctrDeleteChangeset, *ctrDeleteForce)
 	case crevert.FullCommand():
-		return revert(ctx, client, config, *namespace, *crevertChangeset)
+		return revert(ctx, client, config, *namespace, *crevertChangeset, *crevertUID)
 	case cfreeze.FullCommand():
 		return freeze(ctx, client, config, *namespace, *cfreezeChangeset)
 	case cupsertConfigMap.FullCommand():
-		return upsertConfigMap(ctx, client, config, *namespace, *cupsertConfigMapChangeset, *cupsertConfigMapName, *cupsertConfigMapNamespace, *cupsertConfigMapID, *cupsertConfigMapFiles, *cupsertConfigMapLiterals)
+		return upsertConfigMap(ctx, client, config, *namespace, *cupsertConfigMapChangeset, *cupsertConfigMapName, *cupsertConfigMapNamespace, *cupsertConfigMapFiles, *cupsertConfigMapLiterals, *cupsertConfigMapForce)
 	}
 
 	return trace.BadParameter("unsupported command: %v", cmd)
@@ -179,22 +169,28 @@ func Ref(s kingpin.Settings) *rigging.Ref {
 	return r
 }
 
-func revert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref) error {
+func revert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, uid string) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      changeset.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.Revert(ctx, namespace, changeset.Name)
+	err = cs.Revert(ctx, uid)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("changeset %v reverted \n", changeset.Name)
+	if uid != "" {
+		fmt.Printf("Operation %v in changeset %v reverted.\n", uid, changeset.Name)
+		return nil
+	}
+	fmt.Printf("Changeset %v reverted.\n", changeset.Name)
 	return nil
 }
 
@@ -203,13 +199,15 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      changeset.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.Freeze(ctx, namespace, changeset.Name)
+	err = cs.Freeze(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -217,18 +215,20 @@ func freeze(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	return nil
 }
 
-func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace, id string, changeset rigging.Ref, resourceNamespace string, resource rigging.Ref, cascade, force bool) error {
+func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, resourceNamespace string, resource rigging.Ref, cascade, force bool) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      changeset.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.DeleteResource(ctx, namespace, changeset.Name, resourceNamespace, id, resource, cascade)
+	err = cs.DeleteResource(ctx, resourceNamespace, resource, cascade)
 	if err != nil {
 		if force && trace.IsNotFound(err) {
 			fmt.Printf("%v is not found, force flag is set, %v not updated, ignoring \n", resource.String(), changeset.Name)
@@ -240,7 +240,7 @@ func deleteResource(ctx context.Context, client *kubernetes.Clientset, config *r
 	return nil
 }
 
-func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, changesetNamespace string, changeset rigging.Ref, configMapName, configMapNamespace, id string, files []string, literals []string) error {
+func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, changesetNamespace string, changeset rigging.Ref, configMapName, configMapNamespace string, files []string, literals []string, force bool) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
@@ -249,8 +249,10 @@ func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *
 		return trace.Wrap(err)
 	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      changeset.Name,
+		Namespace: changesetNamespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -260,7 +262,7 @@ func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *
 		return trace.Wrap(err)
 	}
 
-	err = cs.Upsert(ctx, changesetNamespace, changeset.Name, id, data)
+	err = cs.Upsert(ctx, data, force)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -268,7 +270,7 @@ func upsertConfigMap(ctx context.Context, client *kubernetes.Clientset, config *
 	return nil
 }
 
-func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, filePath, id string) error {
+func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, changeset rigging.Ref, filePath string, force bool) error {
 	if changeset.Kind != rigging.KindChangeset {
 		return trace.BadParameter("expected %v, got %v", rigging.KindChangeset, changeset.Kind)
 	}
@@ -277,13 +279,15 @@ func upsert(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 		return trace.Wrap(err)
 	}
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      changeset.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.Upsert(ctx, namespace, changeset.Name, id, data)
+	err = cs.Upsert(ctx, data, force)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -296,13 +300,15 @@ func status(ctx context.Context, client *kubernetes.Clientset, config *rest.Conf
 	switch resource.Kind {
 	case rigging.KindChangeset:
 		cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-			Client: client,
-			Config: config,
+			Client:    client,
+			Config:    config,
+			Name:      resource.Name,
+			Namespace: namespace,
 		})
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		err = cs.Status(ctx, namespace, resource.Name, "", retryAttempts, retryPeriod)
+		err = cs.Status(ctx, "", retryAttempts, retryPeriod)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -347,15 +353,17 @@ const (
 
 func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, ref rigging.Ref, output string) error {
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      ref.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	if ref.Name == "" {
-		changesets, err := cs.List(ctx, namespace)
+		changesets, err := cs.List(ctx)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -416,13 +424,15 @@ func get(ctx context.Context, client *kubernetes.Clientset, config *rest.Config,
 
 func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Config, namespace string, tr rigging.Ref, force bool) error {
 	cs, err := rigging.NewChangeset(ctx, rigging.ChangesetConfig{
-		Client: client,
-		Config: config,
+		Client:    client,
+		Config:    config,
+		Name:      tr.Name,
+		Namespace: namespace,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = cs.Delete(ctx, namespace, tr.Name)
+	err = cs.Delete(ctx)
 	if err != nil {
 		if trace.IsNotFound(err) && force {
 			fmt.Printf("%v is not found and force is set\n", tr.Name)

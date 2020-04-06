@@ -72,7 +72,7 @@ func isDelimiter(r rune) bool {
 	return false
 }
 
-// Ref is a resource refernece
+// Ref is a resource reference
 type Ref struct {
 	Kind string
 	Name string

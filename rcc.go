@@ -81,7 +81,7 @@ func (c *RCControl) collectPods(replicationController *v1.ReplicationController)
 }
 
 func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ReplicationController.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ReplicationController.ObjectMeta, c.ReplicationController.TypeMeta))
 
 	rcs := c.Client.Core().ReplicationControllers(c.ReplicationController.Namespace)
 	currentRC, err := rcs.Get(c.ReplicationController.Name, metav1.GetOptions{})
@@ -118,7 +118,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *RCControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ReplicationController.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ReplicationController.ObjectMeta, c.ReplicationController.TypeMeta))
 
 	rcs := c.Client.Core().ReplicationControllers(c.ReplicationController.Namespace)
 	currentRC, err := rcs.Get(c.ReplicationController.Name, metav1.GetOptions{})

@@ -33,7 +33,7 @@ func NewServiceControl(config ServiceConfig) (*ServiceControl, error) {
 	return &ServiceControl{
 		ServiceConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"service": formatMeta(config.ObjectMeta),
+			"service": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type ServiceControl struct {
 }
 
 func (c *ServiceControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.Service.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.Service.ObjectMeta, c.Service.TypeMeta))
 
 	err := c.Client.Core().Services(c.Service.Namespace).Delete(c.Service.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ServiceControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.Service.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.Service.ObjectMeta, c.Service.TypeMeta))
 
 	services := c.Client.Core().Services(c.Service.Namespace)
 	currentService, err := services.Get(c.Service.Name, metav1.GetOptions{})

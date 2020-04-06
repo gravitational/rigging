@@ -33,7 +33,7 @@ func NewServiceAccountControl(config ServiceAccountConfig) (*ServiceAccountContr
 	return &ServiceAccountControl{
 		ServiceAccountConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"service_account": formatMeta(config.ObjectMeta),
+			"service_account": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type ServiceAccountControl struct {
 }
 
 func (c *ServiceAccountControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.Core().ServiceAccounts(c.Namespace).Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	accounts := c.Client.Core().ServiceAccounts(c.Namespace)
 	c.UID = ""

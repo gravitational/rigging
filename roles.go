@@ -33,7 +33,7 @@ func NewRoleControl(config RoleConfig) (*RoleControl, error) {
 	return &RoleControl{
 		RoleConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"role": formatMeta(config.Role.ObjectMeta),
+			"role": formatMeta(config.Role.ObjectMeta, config.Role.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type RoleControl struct {
 }
 
 func (c *RoleControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.RbacV1().Roles(c.Namespace).Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *RoleControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	roles := c.Client.RbacV1().Roles(c.Namespace)
 	c.UID = ""
@@ -85,7 +85,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = roles.Create(c.Role)
-		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta, c.TypeMeta))
 	}
 	_, err = roles.Update(c.Role)
 	return ConvertError(err)
@@ -106,7 +106,7 @@ func NewClusterRoleControl(config ClusterRoleConfig) (*ClusterRoleControl, error
 	return &ClusterRoleControl{
 		ClusterRoleConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"cluster_role": formatMeta(config.ObjectMeta),
+			"cluster_role": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -138,14 +138,14 @@ type ClusterRoleControl struct {
 }
 
 func (c *ClusterRoleControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.RbacV1().ClusterRoles().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	roles := c.Client.RbacV1().ClusterRoles()
 	c.UID = ""
@@ -158,7 +158,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = roles.Create(c.ClusterRole)
-		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta, c.TypeMeta))
 	}
 	_, err = roles.Update(c.ClusterRole)
 	return ConvertError(err)
@@ -179,7 +179,7 @@ func NewRoleBindingControl(config RoleBindingConfig) (*RoleBindingControl, error
 	return &RoleBindingControl{
 		RoleBindingConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"role_binding": formatMeta(config.ObjectMeta),
+			"role_binding": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -211,14 +211,14 @@ type RoleBindingControl struct {
 }
 
 func (c *RoleBindingControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.RbacV1().RoleBindings(c.Namespace).Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *RoleBindingControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	bindings := c.Client.RbacV1().RoleBindings(c.Namespace)
 	c.UID = ""
@@ -231,7 +231,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = bindings.Create(c.RoleBinding)
-		return ConvertErrorWithContext(err, "cannot create role binding %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create role binding %q", formatMeta(c.ObjectMeta, c.TypeMeta))
 	}
 	_, err = bindings.Update(c.RoleBinding)
 	return ConvertError(err)
@@ -252,7 +252,7 @@ func NewClusterRoleBindingControl(config ClusterRoleBindingConfig) (*ClusterRole
 	return &ClusterRoleBindingControl{
 		ClusterRoleBindingConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"cluster_role_binding": formatMeta(config.ObjectMeta),
+			"cluster_role_binding": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -284,14 +284,14 @@ type ClusterRoleBindingControl struct {
 }
 
 func (c *ClusterRoleBindingControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	err := c.Client.RbacV1().ClusterRoleBindings().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.ObjectMeta, c.TypeMeta))
 
 	bindings := c.Client.RbacV1().ClusterRoleBindings()
 	c.UID = ""
@@ -304,7 +304,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 			return trace.Wrap(err)
 		}
 		_, err = bindings.Create(c.ClusterRoleBinding)
-		return ConvertErrorWithContext(err, "cannot create cluster role binding %q", formatMeta(c.ObjectMeta))
+		return ConvertErrorWithContext(err, "cannot create cluster role binding %q", formatMeta(c.ObjectMeta, c.TypeMeta))
 	}
 	_, err = bindings.Update(c.ClusterRoleBinding)
 	return ConvertError(err)

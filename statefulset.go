@@ -37,7 +37,7 @@ func NewStatefulSetControl(config StatefulSetConfig) (*StatefulSetControl, error
 	return &StatefulSetControl{
 		StatefulSetConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"statefulset": formatMeta(config.StatefulSet.ObjectMeta),
+			"statefulset": formatMeta(config.StatefulSet.ObjectMeta, config.StatefulSet.TypeMeta),
 		}),
 	}, nil
 }
@@ -71,7 +71,7 @@ type StatefulSetControl struct {
 
 // Upsert creates or updates a statefulset resource
 func (c *StatefulSetControl) Upsert(ctx context.Context) error {
-	c.Infof("Upsert %v", formatMeta(c.StatefulSet.ObjectMeta))
+	c.Infof("Upsert %v", formatMeta(c.StatefulSet.ObjectMeta, c.StatefulSet.TypeMeta))
 
 	collection := c.Client.AppsV1().StatefulSets(c.StatefulSet.Namespace)
 	currentResource, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
@@ -122,7 +122,7 @@ func (c *StatefulSetControl) collectPods(statefulSet *appsv1.StatefulSet) (map[s
 
 // Delete deletes this statefulset resource
 func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("Deleting statefulset %v.", formatMeta(c.StatefulSet.ObjectMeta))
+	c.Infof("Deleting statefulset %v.", formatMeta(c.StatefulSet.ObjectMeta, c.StatefulSet.TypeMeta))
 
 	collection := c.Client.AppsV1().StatefulSets(c.StatefulSet.Namespace)
 	currentResource, err := collection.Get(c.StatefulSet.Name, metav1.GetOptions{})
@@ -136,7 +136,7 @@ func (c *StatefulSetControl) Delete(ctx context.Context, cascade bool) error {
 		return trace.Wrap(err)
 	}
 
-	c.Infof("Deleting current statefulset %v.", formatMeta(currentResource.ObjectMeta))
+	c.Infof("Deleting current statefulset %v.", formatMeta(currentResource.ObjectMeta, currentResource.TypeMeta))
 	deletePolicy := metav1.DeletePropagationForeground
 	err = collection.Delete(c.StatefulSet.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,

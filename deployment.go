@@ -36,7 +36,7 @@ func NewDeploymentControl(config DeploymentConfig) (*DeploymentControl, error) {
 	return &DeploymentControl{
 		DeploymentConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"deployment": formatMeta(config.ObjectMeta),
+			"deployment": formatMeta(config.ObjectMeta, config.TypeMeta),
 		}),
 	}, nil
 }
@@ -68,7 +68,7 @@ type DeploymentControl struct {
 }
 
 func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.Deployment.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.Deployment.ObjectMeta, c.Deployment.TypeMeta))
 
 	deployments := c.Client.AppsV1().Deployments(c.Deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
@@ -116,7 +116,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 }
 
 func (c *DeploymentControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.Deployment.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.Deployment.ObjectMeta, c.Deployment.TypeMeta))
 
 	deployments := c.Client.AppsV1().Deployments(c.Deployment.Namespace)
 	c.Deployment.UID = ""
@@ -153,7 +153,7 @@ func (c *DeploymentControl) Status() error {
 	if currentDeployment.Spec.Replicas != nil {
 		replicas = *(currentDeployment.Spec.Replicas)
 	}
-	deployment := formatMeta(c.Deployment.ObjectMeta)
+	deployment := formatMeta(c.Deployment.ObjectMeta, c.Deployment.TypeMeta)
 	if currentDeployment.Status.UpdatedReplicas != replicas {
 		return trace.CompareFailed("deployment %v not successful: expected replicas: %v, updated: %v",
 			deployment, replicas, currentDeployment.Status.UpdatedReplicas)

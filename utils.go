@@ -114,7 +114,7 @@ func CollectPods(namespace string, matchLabels map[string]string, logger log.Fie
 		for _, ref := range pod.OwnerReferences {
 			if fn(ref) {
 				pods[pod.Spec.NodeName] = pod
-				logger.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta), pod.Spec.NodeName)
+				logger.Infof("found pod %v on node %v", formatMeta(pod.ObjectMeta, pod.TypeMeta), pod.Spec.NodeName)
 			}
 		}
 	}
@@ -186,7 +186,7 @@ func checkRunningAndReady(pods map[string]v1.Pod, nodes []v1.Node, logger log.Fi
 			logger.Infof("no pod found on node %v", node.Name)
 			return false, trace.NotFound("no pod found on node %v", node.Name)
 		}
-		meta := formatMeta(pod.ObjectMeta)
+		meta := formatMeta(pod.ObjectMeta, pod.TypeMeta)
 		switch pod.Status.Phase {
 		case v1.PodFailed, v1.PodSucceeded:
 			logger.Infof("node %v: pod %v is %q", node.Name, meta, pod.Status.Phase)

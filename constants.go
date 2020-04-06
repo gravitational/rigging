@@ -57,9 +57,9 @@ func Namespace(namespace string) string {
 }
 
 // formatMeta formats this meta as text
-func formatMeta(meta metav1.ObjectMeta) string {
+func formatMeta(meta metav1.ObjectMeta, typeMeta metav1.TypeMeta) string {
 	if meta.Namespace == "" {
 		return meta.Name
 	}
-	return fmt.Sprintf("%v/%v", Namespace(meta.Namespace), meta.Name)
+	return fmt.Sprintf("%v %v/%v", typeMeta.Kind, Namespace(meta.Namespace), meta.Name)
 }

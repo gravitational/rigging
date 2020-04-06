@@ -33,7 +33,7 @@ func NewSecretControl(config SecretConfig) (*SecretControl, error) {
 	return &SecretControl{
 		SecretConfig: config,
 		FieldLogger: log.WithFields(log.Fields{
-			"secret": formatMeta(config.Secret.ObjectMeta),
+			"secret": formatMeta(config.Secret.ObjectMeta, config.Secret.TypeMeta),
 		}),
 	}, nil
 }
@@ -65,14 +65,14 @@ type SecretControl struct {
 }
 
 func (c *SecretControl) Delete(ctx context.Context, cascade bool) error {
-	c.Infof("delete %v", formatMeta(c.Secret.ObjectMeta))
+	c.Infof("delete %v", formatMeta(c.Secret.ObjectMeta, c.Secret.TypeMeta))
 
 	err := c.Client.Core().Secrets(c.Secret.Namespace).Delete(c.Secret.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *SecretControl) Upsert(ctx context.Context) error {
-	c.Infof("upsert %v", formatMeta(c.Secret.ObjectMeta))
+	c.Infof("upsert %v", formatMeta(c.Secret.ObjectMeta, c.Secret.TypeMeta))
 
 	secrets := c.Client.Core().Secrets(c.Secret.Namespace)
 	c.Secret.UID = ""
