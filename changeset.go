@@ -1325,6 +1325,11 @@ func (cs *Changeset) withUpsertOp(ctx context.Context, tr *ChangesetResource, ol
 		Status:            OpStatusCreated,
 		ID:                id,
 	}
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	item.UID = newUUID.String()
 	if !reflect.ValueOf(old).IsNil() {
 		from, err := goyaml.Marshal(old)
 		if err != nil {
