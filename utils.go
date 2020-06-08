@@ -110,14 +110,15 @@ func CollectPods(namespace string, matchLabels map[string]string, logger log.Fie
 		return nil, ConvertError(err)
 	}
 
-	pods := make(map[string]v1.Pod, 0)
+	pods := make(map[string]v1.Pod)
 	for _, pod := range podList.Items {
 		for _, ref := range pod.OwnerReferences {
 			if fn(ref) {
 				pods[pod.Spec.NodeName] = pod
 				logger.WithFields(log.Fields{
-					"pod":  pod.ObjectMeta.Name,
-					"node": pod.Spec.NodeName,
+					"pod":       pod.ObjectMeta.GetName(),
+					"node":      pod.Spec.NodeName,
+					"namespace": pod.ObjectMeta.GetNamespace(),
 				}).Info("Found pod on node.")
 			}
 		}
@@ -146,9 +147,10 @@ func CollectReplicaSets(namespace string, matchLabels map[string]string, logger 
 			if fn(ref) {
 				replicaSets = append(replicaSets, replicaSet)
 				logger.WithFields(log.Fields{
-					"replicaset": replicaSet.ObjectMeta.Name,
+					"replicaset": replicaSet.ObjectMeta.GetName(),
 					"deployment": ref.Name,
 					"UID":        ref.UID,
+					"namespace":  replicaSet.ObjectMeta.GetNamespace(),
 				}).Info("Found ReplicaSet owned by deployment.")
 			}
 		}

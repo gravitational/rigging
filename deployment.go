@@ -177,7 +177,7 @@ func (c *DeploymentControl) collectPods(deployment *appsv1.Deployment) (map[stri
 		return nil, ConvertError(err)
 	}
 
-	pods := make(map[string]v1.Pod, 0)
+	pods := make(map[string]v1.Pod)
 	for _, replicaSet := range replicaSets {
 		podMap, err := CollectPods(replicaSet.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
 			return ref.Kind == KindReplicaSet && ref.UID == replicaSet.UID
