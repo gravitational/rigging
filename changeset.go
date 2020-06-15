@@ -158,6 +158,12 @@ func (cs *Changeset) upsertResource(ctx context.Context, changesetNamespace, cha
 		_, err = cs.upsertClusterRoleBinding(ctx, tr, data)
 	case KindPodSecurityPolicy:
 		_, err = cs.upsertPodSecurityPolicy(ctx, tr, data)
+	case KindCustomResourceDefinition:
+		_, err = cs.upsertCustomResourceDefinition(ctx, tr, data)
+	case KindNamespace:
+		_, err = cs.upsertNamespace(ctx, tr, data)
+	case KindPriorityClass:
+		_, err = cs.upsertPriorityClass(ctx, tr, data)
 	default:
 		return trace.BadParameter("unsupported resource type %v", kind.Kind)
 	}
@@ -260,6 +266,12 @@ func (cs *Changeset) DeleteResource(ctx context.Context, changesetNamespace, cha
 		return cs.deleteClusterRoleBinding(ctx, tr, resource.Name, cascade)
 	case KindPodSecurityPolicy:
 		return cs.deletePodSecurityPolicy(ctx, tr, resource.Name, cascade)
+	case KindCustomResourceDefinition:
+		return cs.deleteCustomResourceDefinition(ctx, tr, resource.Name, cascade)
+	case KindNamespace:
+		return cs.deleteNamespace(ctx, tr, resource.Name, cascade)
+	case KindPriorityClass:
+		return cs.deletePriorityClass(ctx, tr, resource.Name, cascade)
 	}
 	return trace.BadParameter("delete: unimplemented resource %v", resource.Kind)
 }
@@ -353,6 +365,12 @@ func (cs *Changeset) status(ctx context.Context, data []byte, uid string) error 
 		return cs.statusClusterRoleBinding(ctx, data, uid)
 	case KindPodSecurityPolicy:
 		return cs.statusPodSecurityPolicy(ctx, data, uid)
+	case KindCustomResourceDefinition:
+		return cs.statusCustomResourceDefinition(ctx, data, uid)
+	case KindNamespace:
+		return cs.statusNamespace(ctx, data, uid)
+	case KindPriorityClass:
+		return cs.statusPriorityClass(ctx, data, uid)
 	}
 	return trace.BadParameter("unsupported resource type %v for resource %v", header.Kind, header.Name)
 }
@@ -589,6 +607,49 @@ func (cs *Changeset) statusClusterRole(ctx context.Context, data []byte, uid str
 	return control.Status()
 }
 
+func (cs *Changeset) statusNamespace(ctx context.Context, data []byte, uid string) error {
+	namespace, err := ParseNamespace(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.CoreV1().Namespaces().Get(namespace.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("namespace with UID %v not found", uid)
+		}
+	}
+	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusPriorityClass(ctx context.Context, data []byte, uid string) error {
+	pc, err := ParsePriorityClass(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.Client.SchedulingV1beta1().PriorityClasses().Get(pc.Name, metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("priority class with UID %v not found", uid)
+		}
+	}
+	control, err := NewPriorityClassControl(PriorityClassConfig{PriorityClass: pc, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+
+}
+
 func (cs *Changeset) statusRoleBinding(ctx context.Context, data []byte, uid string) error {
 	binding, err := ParseRoleBinding(bytes.NewReader(data))
 	if err != nil {
@@ -646,6 +707,31 @@ func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, u
 		}
 	}
 	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return control.Status()
+}
+
+func (cs *Changeset) statusCustomResourceDefinition(ctx context.Context, data []byte, uid string) error {
+	crd, err := ParseCustomResourceDefinition(bytes.NewReader(data))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if uid != "" {
+		existing, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(crd.Name,
+			metav1.GetOptions{})
+		if err != nil {
+			return ConvertError(err)
+		}
+		if string(existing.GetUID()) != uid {
+			return trace.NotFound("custom resource definition with UID %v not found", uid)
+		}
+	}
+	control, err := NewCustomResourceDefinitionControl(CustomResourceDefinitionConfig{
+		CustomResourceDefinition: crd,
+		Client:                   cs.APIExtensionsClient,
+	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -830,6 +916,34 @@ func (cs *Changeset) deleteClusterRole(ctx context.Context, tr *ChangesetResourc
 	})
 }
 
+func (cs *Changeset) deleteNamespace(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	namespace, err := cs.Client.CoreV1().Namespaces().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.Namespace, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
+func (cs *Changeset) deletePriorityClass(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	pc, err := cs.Client.SchedulingV1beta1().PriorityClasses().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewPriorityClassControl(PriorityClassConfig{PriorityClass: pc, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.PriorityClass, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) deleteRoleBinding(ctx context.Context, tr *ChangesetResource, namespace, name string, cascade bool) error {
 	binding, err := cs.Client.RbacV1().RoleBindings(Namespace(namespace)).Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -872,6 +986,24 @@ func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetR
 	})
 }
 
+func (cs *Changeset) deleteCustomResourceDefinition(
+	ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
+	crd, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return ConvertError(err)
+	}
+	control, err := NewCustomResourceDefinitionControl(CustomResourceDefinitionConfig{
+		CustomResourceDefinition: crd,
+		Client:                   cs.APIExtensionsClient,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return cs.withDeleteOp(ctx, tr, control.CustomResourceDefinition, func() error {
+		return control.Delete(ctx, cascade)
+	})
+}
+
 func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *OperationInfo) error {
 	kind := info.Kind()
 	switch info.Kind() {
@@ -903,6 +1035,12 @@ func (cs *Changeset) revert(ctx context.Context, item *ChangesetItem, info *Oper
 		return cs.revertClusterRoleBinding(ctx, item)
 	case KindPodSecurityPolicy:
 		return cs.revertPodSecurityPolicy(ctx, item)
+	case KindCustomResourceDefinition:
+		return cs.revertCustomResourceDefinition(ctx, item)
+	case KindNamespace:
+		return cs.revertNamespace(ctx, item)
+	case KindPriorityClass:
+		return cs.revertPriorityClass(ctx, item)
 	}
 	return trace.BadParameter("unsupported resource type %v", kind)
 }
@@ -1193,6 +1331,58 @@ func (cs *Changeset) revertClusterRole(ctx context.Context, item *ChangesetItem)
 	return control.Upsert(ctx)
 }
 
+func (cs *Changeset) revertNamespace(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	namespace, err := ParseNamespace(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	// this operation either created or updated the resource, so we create a new version
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertPriorityClass(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	pc, err := ParsePriorityClass(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewPriorityClassControl(PriorityClassConfig{PriorityClass: pc, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	// this operation either created or updated the resource, so we create a new version
+	return control.Upsert(ctx)
+}
+
 func (cs *Changeset) revertRoleBinding(ctx context.Context, item *ChangesetItem) error {
 	resource := item.From
 	if len(resource) == 0 {
@@ -1255,6 +1445,35 @@ func (cs *Changeset) revertPodSecurityPolicy(ctx context.Context, item *Changese
 		return trace.Wrap(err)
 	}
 	control, err := NewPodSecurityPolicyControl(PodSecurityPolicyConfig{PodSecurityPolicy: policy, Client: cs.Client})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	// this operation created the resource, so we will delete it
+	if len(item.From) == 0 {
+		err = control.Delete(ctx, true)
+		// If the resource has already been deleted, suppress the error
+		if trace.IsNotFound(err) {
+			return nil
+		}
+		return trace.Wrap(err)
+	}
+	// this operation either created or updated the resource, so we create a new version
+	return control.Upsert(ctx)
+}
+
+func (cs *Changeset) revertCustomResourceDefinition(ctx context.Context, item *ChangesetItem) error {
+	resource := item.From
+	if len(resource) == 0 {
+		resource = item.To
+	}
+	crd, err := ParseCustomResourceDefinition(strings.NewReader(resource))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	control, err := NewCustomResourceDefinitionControl(CustomResourceDefinitionConfig{
+		CustomResourceDefinition: crd,
+		Client:                   cs.APIExtensionsClient,
+	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -1587,6 +1806,70 @@ func (cs *Changeset) upsertClusterRole(ctx context.Context, tr *ChangesetResourc
 	})
 }
 
+func (cs *Changeset) upsertNamespace(
+	ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	namespace, err := ParseNamespace(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":        tr.String(),
+		"namespace": formatMeta(namespace.ObjectMeta),
+	})
+	namespaces := cs.Client.CoreV1().Namespaces()
+	current, err := namespaces.Get(namespace.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.WithField("name", namespace.Name).Debug("Existing namespace not found.")
+		current = nil
+	}
+	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaNamespace(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.Namespace, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertPriorityClass(
+	ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	pc, err := ParsePriorityClass(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":             tr.String(),
+		"priority_class": formatMeta(pc.ObjectMeta),
+	})
+	priorityClasses := cs.Client.SchedulingV1beta1().PriorityClasses()
+	current, err := priorityClasses.Get(pc.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing PriorityClass not found")
+		current = nil
+	}
+	control, err := NewPriorityClassControl(PriorityClassConfig{PriorityClass: pc, Client: cs.Client})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaPriorityClass(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.PriorityClass, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
 func (cs *Changeset) upsertRoleBinding(ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
 	binding, err := ParseRoleBinding(bytes.NewReader(data))
 	if err != nil {
@@ -1676,6 +1959,41 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		updateTypeMetaPodSecurityPolicy(current)
 	}
 	return cs.withUpsertOp(ctx, tr, current, control.PodSecurityPolicy, func() error {
+		return control.Upsert(ctx)
+	})
+}
+
+func (cs *Changeset) upsertCustomResourceDefinition(
+	ctx context.Context, tr *ChangesetResource, data []byte) (*ChangesetResource, error) {
+	crd, err := ParseCustomResourceDefinition(bytes.NewReader(data))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	log := log.WithFields(log.Fields{
+		"cs":                        tr.String(),
+		"custom_resource_defintion": formatMeta(crd.ObjectMeta),
+	})
+	current, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().
+		Get(crd.Name, metav1.GetOptions{})
+	err = ConvertError(err)
+	if err != nil {
+		if !trace.IsNotFound(err) {
+			return nil, trace.Wrap(err)
+		}
+		log.Debug("existing custom resource definition not found")
+		current = nil
+	}
+	control, err := NewCustomResourceDefinitionControl(CustomResourceDefinitionConfig{
+		CustomResourceDefinition: crd,
+		Client:                   cs.APIExtensionsClient,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if current != nil {
+		updateTypeMetaCustomResourceDefinition(current)
+	}
+	return cs.withUpsertOp(ctx, tr, current, control.CustomResourceDefinition, func() error {
 		return control.Upsert(ctx)
 	})
 }
