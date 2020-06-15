@@ -138,9 +138,6 @@ func ParseConfigMap(r io.Reader) (*v1.ConfigMap, error) {
 
 // ParseCustomResourceDefinition parses a Custom Resource Definition
 func ParseCustomResourceDefinition(r io.Reader) (*extensionsv1beta1.CustomResourceDefinition, error) {
-	if r == nil {
-		return nil, trace.BadParameter("missing reader")
-	}
 	cm := extensionsv1beta1.CustomResourceDefinition{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&cm)
 	if err != nil {

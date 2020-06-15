@@ -41,9 +41,9 @@ func NewPriorityClassControl(
 	}, nil
 }
 
-// PriorityClassConfig  is a PriorityClass control configuration
+// PriorityClassConfig is a PriorityClass control configuration
 type PriorityClassConfig struct {
-	// PriorityClass is already parsed daemon set, will be used if present
+	// PriorityClass is already parsed priority class
 	*v1beta1.PriorityClass
 	// Client is k8s client
 	Client *kubernetes.Clientset
@@ -60,7 +60,7 @@ func (c *PriorityClassConfig) checkAndSetDefaults() error {
 	return nil
 }
 
-// PriorityClassControl is a daemon set controller,
+// PriorityClassControl is a priority class resource controller,
 // adds various operations, like delete, status check and update
 type PriorityClassControl struct {
 	PriorityClassConfig

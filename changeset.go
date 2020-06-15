@@ -618,7 +618,7 @@ func (cs *Changeset) statusNamespace(ctx context.Context, data []byte, uid strin
 			return ConvertError(err)
 		}
 		if string(existing.GetUID()) != uid {
-			return trace.NotFound("cluster role with UID %v not found", uid)
+			return trace.NotFound("namespace with UID %v not found", uid)
 		}
 	}
 	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})
@@ -639,7 +639,7 @@ func (cs *Changeset) statusPriorityClass(ctx context.Context, data []byte, uid s
 			return ConvertError(err)
 		}
 		if string(existing.GetUID()) != uid {
-			return trace.NotFound("cluster role with UID %v not found", uid)
+			return trace.NotFound("priority class with UID %v not found", uid)
 		}
 	}
 	control, err := NewPriorityClassControl(PriorityClassConfig{PriorityClass: pc, Client: cs.Client})
@@ -1823,7 +1823,7 @@ func (cs *Changeset) upsertNamespace(
 		if !trace.IsNotFound(err) {
 			return nil, trace.Wrap(err)
 		}
-		log.Debug("existing namespace not found")
+		log.WithField("name", namespace.Name).Debug("Existing namespace not found.")
 		current = nil
 	}
 	control, err := NewNamespaceControl(NamespaceConfig{Namespace: namespace, Client: cs.Client})

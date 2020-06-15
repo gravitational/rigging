@@ -40,9 +40,9 @@ func NewNamespaceControl(
 	}, nil
 }
 
-// NamespaceConfig  is a Namespace control configuration
+// NamespaceConfig is a Namespace control configuration
 type NamespaceConfig struct {
-	// Namespace is already parsed daemon set, will be used if present
+	// Namespace is already parsed namespace resource
 	*v1.Namespace
 	// Client is k8s client
 	Client *kubernetes.Clientset
@@ -59,7 +59,7 @@ func (c *NamespaceConfig) checkAndSetDefaults() error {
 	return nil
 }
 
-// NamespaceControl is a daemon set controller,
+// NamespaceControl is a namespace resource controller,
 // adds various operations, like delete, status check and update
 type NamespaceControl struct {
 	NamespaceConfig
@@ -76,26 +76,26 @@ func (c *NamespaceControl) Delete(ctx context.Context, cascade bool) error {
 func (c *NamespaceControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.Namespace.ObjectMeta))
 
-	Namespaces := c.Client.CoreV1().Namespaces()
+	namespaces := c.Client.CoreV1().Namespaces()
 	c.Namespace.UID = ""
 	c.Namespace.SelfLink = ""
 	c.Namespace.ResourceVersion = ""
-	_, err := Namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
+	_, err := namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = Namespaces.Create(c.Namespace)
+		_, err = namespaces.Create(c.Namespace)
 		return ConvertError(err)
 	}
-	_, err = Namespaces.Update(c.Namespace)
+	_, err = namespaces.Update(c.Namespace)
 	return ConvertError(err)
 }
 
 func (c *NamespaceControl) Status() error {
-	Namespaces := c.Client.CoreV1().Namespaces()
-	_, err := Namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
+	namespaces := c.Client.CoreV1().Namespaces()
+	_, err := namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 

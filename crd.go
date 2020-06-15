@@ -17,12 +17,11 @@ package rigging
 import (
 	"context"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -41,7 +40,7 @@ func NewCustomResourceDefinitionControl(
 	}, nil
 }
 
-// CustomResourceDefinitionConfig  is a CustomResourceDefinition control configuration
+// CustomResourceDefinitionConfig is a CustomResourceDefinition control configuration
 type CustomResourceDefinitionConfig struct {
 	// CustomResourceDefinition is already parsed daemon set, will be used if present
 	*v1beta1.CustomResourceDefinition
@@ -60,7 +59,7 @@ func (c *CustomResourceDefinitionConfig) checkAndSetDefaults() error {
 	return nil
 }
 
-// CustomResourceDefinitionControl is a daemon set controller,
+// CustomResourceDefinitionControl is a custom resource definition controller,
 // adds various operations, like delete, status check and update
 type CustomResourceDefinitionControl struct {
 	CustomResourceDefinitionConfig
