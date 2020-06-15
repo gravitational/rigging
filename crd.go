@@ -42,7 +42,7 @@ func NewCustomResourceDefinitionControl(
 
 // CustomResourceDefinitionConfig is a CustomResourceDefinition control configuration
 type CustomResourceDefinitionConfig struct {
-	// CustomResourceDefinition is already parsed daemon set, will be used if present
+	// CustomResourceDefinition is already parsed custom resource definition
 	*v1beta1.CustomResourceDefinition
 	// Client is k8s client
 	Client *apiextensionsclientset.Clientset
