@@ -21,7 +21,7 @@
   revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
 
 [[projects]]
-  branch = "sergei/hostpath_035"
+  branch = "release-0.35"
   digest = "1:6c1c43bfcc3ebb83e94fd0246d5f7299c7ed108fa6c2fe81eef133d76a4a457b"
   name = "github.com/coreos/prometheus-operator"
   packages = [
@@ -32,7 +32,7 @@
     "pkg/client/versioned/typed/monitoring/v1",
   ]
   pruneopts = "UT"
-  revision = "2d0e10481aaec51d3bf7d0c8da7a927d8532ec01"
+  revision = "d0b647911671779fcb1fb2ae9583b2f7e1e30bbc"
   source = "github.com/gravitational/prometheus-operator"
 
 [[projects]]
