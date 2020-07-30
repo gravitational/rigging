@@ -60,7 +60,7 @@
 [[constraint]]
   name = "github.com/coreos/prometheus-operator"
   source = "github.com/gravitational/prometheus-operator"
-  branch = "sergei/hostpath_035"
+  branch = "release-0.35"
 
 [[override]]
 name = "cloud.google.com/go"
