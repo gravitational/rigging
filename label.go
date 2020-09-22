@@ -1,4 +1,4 @@
-// Copyright 2016 Gravitational Inc.
+// Copyright 2016-2020 Gravitational Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,26 +15,19 @@
 package rigging
 
 import (
-	"encoding/json"
-
 	"github.com/gravitational/trace"
+	v1 "k8s.io/api/core/v1"
+	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
-func NodesMatchingLabel(labelQuery string) (*NodeList, error) {
-	var nodes NodeList
-
-	cmd := KubeCommand("get", "nodes", "-l", labelQuery, "-o", "json")
-	out, err := cmd.Output()
+func NodesMatchingLabel(client *kubernetes.Clientset, labelQuery string) (*v1.NodeList, error) {
+	nodes, err := client.CoreV1().Nodes().List(v1meta.ListOptions{LabelSelector: labelQuery})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, ConvertError(err)
 	}
 
-	err = json.Unmarshal(out, &nodes)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &nodes, nil
+	return nodes, nil
 }
 
 func LabelNode(name string, label string) ([]byte, error) {
