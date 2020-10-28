@@ -55,6 +55,10 @@ const (
 	DefaultBufferSize  = 1024
 
 	ChangesetAPIVersion = "changeset.gravitational.io/v1"
+
+	// CustomerManagedAnnotation specifies an annotation that will cause rigging to not overwrite an object that is
+	// already present in kubernetes if the annotation is already present on the object.
+	CustomerManagedAnnotation = "gravitational.io/customer-managed"
 )
 
 // Namespace returns a default namespace if the specified namespace is empty

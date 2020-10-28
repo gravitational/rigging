@@ -131,6 +131,11 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentDS != nil {
+		if checkCustomerManagedResource(currentDS.Annotations) {
+			c.WithField("daemonset", formatMeta(c.DaemonSet.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+			return nil
+		}
+
 		control, err := NewDaemonSetControl(DSConfig{DaemonSet: currentDS, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)
