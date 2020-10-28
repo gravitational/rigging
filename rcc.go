@@ -131,6 +131,11 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentRC != nil {
+		if checkCustomerManagedResource(currentRC.Annotations) {
+			c.WithField("replicationcontroller", formatMeta(c.ReplicationController.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+			return nil
+		}
+
 		control, err := NewReplicationControllerControl(RCConfig{ReplicationController: currentRC, Client: c.Client})
 		if err != nil {
 			return ConvertError(err)
