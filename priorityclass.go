@@ -81,7 +81,7 @@ func (c *PriorityClassControl) Upsert(ctx context.Context) error {
 	c.PriorityClass.UID = ""
 	c.PriorityClass.SelfLink = ""
 	c.PriorityClass.ResourceVersion = ""
-	_, err := PriorityClasss.Get(c.PriorityClass.Name, metav1.GetOptions{})
+	existing, err := PriorityClasss.Get(c.PriorityClass.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -90,6 +90,12 @@ func (c *PriorityClassControl) Upsert(ctx context.Context) error {
 		_, err = PriorityClasss.Create(c.PriorityClass)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("priorityclass", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = PriorityClasss.Update(c.PriorityClass)
 	return ConvertError(err)
 }

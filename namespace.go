@@ -80,7 +80,7 @@ func (c *NamespaceControl) Upsert(ctx context.Context) error {
 	c.Namespace.UID = ""
 	c.Namespace.SelfLink = ""
 	c.Namespace.ResourceVersion = ""
-	_, err := Namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
+	existing, err := Namespaces.Get(c.Namespace.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -89,6 +89,12 @@ func (c *NamespaceControl) Upsert(ctx context.Context) error {
 		_, err = Namespaces.Create(c.Namespace)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("namespace", formatMeta(c.Namespace.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = Namespaces.Update(c.Namespace)
 	return ConvertError(err)
 }

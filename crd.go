@@ -90,6 +90,12 @@ func (c *CustomResourceDefinitionControl) Upsert(ctx context.Context) error {
 		_, err = CustomResourceDefinitions.Create(c.CustomResourceDefinition)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("customresourcedefinition", formatMeta(c.CustomResourceDefinition.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.CustomResourceDefinition.ResourceVersion = existing.ResourceVersion
 	_, err = CustomResourceDefinitions.Update(c.CustomResourceDefinition)
 	return ConvertError(err)

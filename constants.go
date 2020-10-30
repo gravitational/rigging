@@ -55,6 +55,12 @@ const (
 	DefaultBufferSize  = 1024
 
 	ChangesetAPIVersion = "changeset.gravitational.io/v1"
+
+	// CustomerManagedAnnotation specifies an annotation that a customer can use to take control of a kubernetes object
+	// that is normally managed via gravity/rigging. If rigging sees this annotation on an object, it will no longer
+	// update the object to the current desired state. Insert / Delete operations will still proceed however. This
+	// is mainly so that a customer can take over and customize configuration built into gravity.
+	CustomerManagedAnnotation = "gravitational.io/customer-managed"
 )
 
 // Namespace returns a default namespace if the specified namespace is empty

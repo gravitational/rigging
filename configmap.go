@@ -78,7 +78,7 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 	c.ConfigMap.UID = ""
 	c.ConfigMap.SelfLink = ""
 	c.ConfigMap.ResourceVersion = ""
-	_, err := configMaps.Get(c.ConfigMap.Name, metav1.GetOptions{})
+	currentConfigMap, err := configMaps.Get(c.ConfigMap.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -87,6 +87,12 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 		_, err = configMaps.Create(c.ConfigMap)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentConfigMap.Annotations) {
+		c.WithField("configmap", formatMeta(c.ConfigMap.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = configMaps.Update(c.ConfigMap)
 	return ConvertError(err)
 }

@@ -86,6 +86,12 @@ func (c *AlertmanagerControl) Upsert(ctx context.Context) error {
 		_, err = client.Create(c.Alertmanager)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentAlertmanager.Annotations) {
+		c.WithField("alertmanager", formatMeta(c.Alertmanager.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.Alertmanager.ResourceVersion = currentAlertmanager.ResourceVersion
 	_, err = client.Update(c.Alertmanager)
 	return ConvertError(err)

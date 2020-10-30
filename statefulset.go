@@ -22,7 +22,7 @@ import (
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -84,6 +84,11 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 	}
 
 	if currentResource != nil {
+		if checkCustomerManagedResource(currentResource.Annotations) {
+			c.WithField("statefulset", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+			return nil
+		}
+
 		control, err := NewStatefulSetControl(StatefulSetConfig{StatefulSet: currentResource, Client: c.Client})
 		if err != nil {
 			return trace.Wrap(err)

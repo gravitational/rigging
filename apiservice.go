@@ -87,6 +87,12 @@ func (c *APIServiceControl) Upsert(ctx context.Context) error {
 		_, err = client.Create(c.APIService)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentAPIService.Annotations) {
+		c.WithField("apiservice", formatMeta(c.APIService.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.APIService.ResourceVersion = currentAPIService.ResourceVersion
 	_, err = client.Update(c.APIService)
 	return ConvertError(err)

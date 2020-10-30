@@ -122,7 +122,7 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.Deployment.UID = ""
 	c.Deployment.SelfLink = ""
 	c.Deployment.ResourceVersion = ""
-	_, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
+	existing, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -131,6 +131,12 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 		_, err = deployments.Create(c.Deployment)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("deploy", formatMeta(c.Deployment.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = deployments.Update(c.Deployment)
 	return ConvertError(err)
 }

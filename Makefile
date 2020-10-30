@@ -15,7 +15,7 @@ build:
 
 .PHONY: test
 test:
-	go test -v -test.parallel=0 ./ ./tool/...
+	go test -v ./ ./tool/...
 
 BUILDBOX := quay.io/gravitational/debian-venti:go1.12.9-buster
 
