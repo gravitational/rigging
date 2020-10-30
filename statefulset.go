@@ -85,7 +85,7 @@ func (c *StatefulSetControl) Upsert(ctx context.Context) error {
 
 	if currentResource != nil {
 		if checkCustomerManagedResource(currentResource.Annotations) {
-			c.WithField("statefulset", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+			c.WithField("statefulset", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 			return nil
 		}
 

@@ -88,7 +88,7 @@ func (c *PrometheusControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(currentPrometheus.Annotations) {
-		c.WithField("prometheus", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("prometheus", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

@@ -89,7 +89,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("role", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("role", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
@@ -168,7 +168,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("clusterrole", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("clusterrole", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
@@ -247,7 +247,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("rolebinding", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("rolebinding", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
@@ -326,7 +326,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("clusterrolebinding", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("clusterrolebinding", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

@@ -94,7 +94,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 
 	if currentJob != nil {
 		if checkCustomerManagedResource(currentJob.Annotations) {
-			c.WithField("job", formatMeta(c.Job.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+			c.WithField("job", formatMeta(c.Job.ObjectMeta)).Info("Skipping update since object is customer managed.")
 			return nil
 		}
 

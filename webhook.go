@@ -87,7 +87,7 @@ func (c *ValidatingWebhookConfigurationControl) Upsert(ctx context.Context) erro
 	}
 
 	if checkCustomerManagedResource(currentWebhook.Annotations) {
-		c.WithField("webhook", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("webhook", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
@@ -168,7 +168,7 @@ func (c *MutatingWebhookConfigurationControl) Upsert(ctx context.Context) error 
 	}
 
 	if checkCustomerManagedResource(currentWebhook.Annotations) {
-		c.WithField("mutatingwebhook", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("mutatingwebhook", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

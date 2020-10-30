@@ -89,7 +89,7 @@ func (c *ServiceMonitorControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(currentServiceMonitor.Annotations) {
-		c.WithField("servicemonitor", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("servicemonitor", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
