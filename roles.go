@@ -19,7 +19,7 @@ import (
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/rbac/v1"
+	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -78,7 +78,7 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := roles.Get(c.Name, metav1.GetOptions{})
+	existing, err := roles.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -87,6 +87,12 @@ func (c *RoleControl) Upsert(ctx context.Context) error {
 		_, err = roles.Create(c.Role)
 		return ConvertErrorWithContext(err, "cannot create role %q", formatMeta(c.ObjectMeta))
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("role", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = roles.Update(c.Role)
 	return ConvertError(err)
 }
@@ -151,7 +157,7 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := roles.Get(c.Name, metav1.GetOptions{})
+	existing, err := roles.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -160,6 +166,12 @@ func (c *ClusterRoleControl) Upsert(ctx context.Context) error {
 		_, err = roles.Create(c.ClusterRole)
 		return ConvertErrorWithContext(err, "cannot create cluster role %q", formatMeta(c.ObjectMeta))
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("clusterrole", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = roles.Update(c.ClusterRole)
 	return ConvertError(err)
 }
@@ -224,7 +236,7 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := bindings.Get(c.Name, metav1.GetOptions{})
+	existing, err := bindings.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -233,6 +245,12 @@ func (c *RoleBindingControl) Upsert(ctx context.Context) error {
 		_, err = bindings.Create(c.RoleBinding)
 		return ConvertErrorWithContext(err, "cannot create role binding %q", formatMeta(c.ObjectMeta))
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("rolebinding", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = bindings.Update(c.RoleBinding)
 	return ConvertError(err)
 }
@@ -297,7 +315,7 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := bindings.Get(c.Name, metav1.GetOptions{})
+	existing, err := bindings.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -306,6 +324,12 @@ func (c *ClusterRoleBindingControl) Upsert(ctx context.Context) error {
 		_, err = bindings.Create(c.ClusterRoleBinding)
 		return ConvertErrorWithContext(err, "cannot create cluster role binding %q", formatMeta(c.ObjectMeta))
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("clusterrolebinding", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = bindings.Update(c.ClusterRoleBinding)
 	return ConvertError(err)
 }

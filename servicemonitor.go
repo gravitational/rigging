@@ -87,6 +87,12 @@ func (c *ServiceMonitorControl) Upsert(ctx context.Context) error {
 		_, err = serviceMonitorsClient.Create(c.ServiceMonitor)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentServiceMonitor.Annotations) {
+		c.WithField("servicemonitor", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.ServiceMonitor.ResourceVersion = currentServiceMonitor.ResourceVersion
 	_, err = serviceMonitorsClient.Update(c.ServiceMonitor)
 	return ConvertError(err)

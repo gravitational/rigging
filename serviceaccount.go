@@ -78,7 +78,7 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := accounts.Get(c.Name, metav1.GetOptions{})
+	existing, err := accounts.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -87,6 +87,12 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 		_, err = accounts.Create(c.ServiceAccount)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("serviceaccount", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = accounts.Update(c.ServiceAccount)
 	return ConvertError(err)
 }

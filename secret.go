@@ -78,7 +78,7 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 	c.Secret.UID = ""
 	c.Secret.SelfLink = ""
 	c.Secret.ResourceVersion = ""
-	_, err := secrets.Get(c.Secret.Name, metav1.GetOptions{})
+	existing, err := secrets.Get(c.Secret.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -87,6 +87,12 @@ func (c *SecretControl) Upsert(ctx context.Context) error {
 		_, err = secrets.Create(c.Secret)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("secret", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = secrets.Update(c.Secret)
 	return ConvertError(err)
 }

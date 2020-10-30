@@ -86,6 +86,12 @@ func (c *PrometheusControl) Upsert(ctx context.Context) error {
 		_, err = client.Create(c.Prometheus)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentPrometheus.Annotations) {
+		c.WithField("prometheus", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.Prometheus.ResourceVersion = currentPrometheus.ResourceVersion
 	_, err = client.Update(c.Prometheus)
 	return ConvertError(err)

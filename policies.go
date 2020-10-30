@@ -78,7 +78,7 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	_, err := policies.Get(c.Name, metav1.GetOptions{})
+	existing, err := policies.Get(c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -87,6 +87,12 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 		_, err = policies.Create(c.PodSecurityPolicy)
 		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
 	}
+
+	if checkCustomerManagedResource(existing.Annotations) {
+		c.WithField("psp", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	_, err = policies.Update(c.PodSecurityPolicy)
 	return ConvertError(err)
 }

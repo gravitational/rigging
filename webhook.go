@@ -85,6 +85,12 @@ func (c *ValidatingWebhookConfigurationControl) Upsert(ctx context.Context) erro
 		_, err = c.client().Create(c.ValidatingWebhookConfiguration)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentWebhook.Annotations) {
+		c.WithField("webhook", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.ResourceVersion = currentWebhook.ResourceVersion
 	_, err = c.client().Update(c.ValidatingWebhookConfiguration)
 	return ConvertError(err)
@@ -160,6 +166,12 @@ func (c *MutatingWebhookConfigurationControl) Upsert(ctx context.Context) error 
 		_, err = c.client().Create(c.MutatingWebhookConfiguration)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentWebhook.Annotations) {
+		c.WithField("mutatingwebhook", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.ResourceVersion = currentWebhook.ResourceVersion
 	_, err = c.client().Update(c.MutatingWebhookConfiguration)
 	return ConvertError(err)

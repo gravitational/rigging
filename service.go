@@ -87,6 +87,12 @@ func (c *ServiceControl) Upsert(ctx context.Context) error {
 		_, err = services.Create(c.Service)
 		return ConvertError(err)
 	}
+
+	if checkCustomerManagedResource(currentService.Annotations) {
+		c.WithField("service", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
+		return nil
+	}
+
 	c.Service.Spec.ClusterIP = currentService.Spec.ClusterIP
 	c.Service.ResourceVersion = currentService.ResourceVersion
 	_, err = services.Update(c.Service)

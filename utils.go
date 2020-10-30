@@ -368,3 +368,8 @@ const (
 	deletePollInterval = 1 * time.Second
 	deleteTimeout      = 5 * time.Minute
 )
+
+func checkCustomerManagedResource(annotations map[string]string) bool {
+	_, ok := annotations[CustomerManagedAnnotation]
+	return ok
+}
