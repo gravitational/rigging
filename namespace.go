@@ -91,7 +91,7 @@ func (c *NamespaceControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("namespace", formatMeta(c.Namespace.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("namespace", formatMeta(c.Namespace.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

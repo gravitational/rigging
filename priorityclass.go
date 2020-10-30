@@ -92,7 +92,7 @@ func (c *PriorityClassControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("priorityclass", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("priorityclass", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

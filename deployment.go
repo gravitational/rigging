@@ -133,7 +133,7 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("deploy", formatMeta(c.Deployment.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("deploy", formatMeta(c.Deployment.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

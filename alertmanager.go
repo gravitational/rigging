@@ -88,7 +88,7 @@ func (c *AlertmanagerControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(currentAlertmanager.Annotations) {
-		c.WithField("alertmanager", formatMeta(c.Alertmanager.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("alertmanager", formatMeta(c.Alertmanager.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

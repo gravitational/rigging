@@ -92,7 +92,7 @@ func (c *CustomResourceDefinitionControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(existing.Annotations) {
-		c.WithField("customresourcedefinition", formatMeta(c.CustomResourceDefinition.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("customresourcedefinition", formatMeta(c.CustomResourceDefinition.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

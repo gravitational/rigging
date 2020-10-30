@@ -89,7 +89,7 @@ func (c *ConfigMapControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(currentConfigMap.Annotations) {
-		c.WithField("configmap", formatMeta(c.ConfigMap.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("configmap", formatMeta(c.ConfigMap.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 

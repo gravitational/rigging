@@ -57,7 +57,7 @@ const (
 	ChangesetAPIVersion = "changeset.gravitational.io/v1"
 
 	// CustomerManagedAnnotation specifies an annotation that a customer can use to take control of a kubernetes object
-	// that is normally managed via gravity/rigging. If rigging see's this annotation on an object, it will no longer
+	// that is normally managed via gravity/rigging. If rigging sees this annotation on an object, it will no longer
 	// update the object to the current desired state. Insert / Delete operations will still proceed however. This
 	// is mainly so that a customer can take over and customize configuration built into gravity.
 	CustomerManagedAnnotation = "gravitational.io/customer-managed"

@@ -88,7 +88,7 @@ func (c *PrometheusRuleControl) Upsert(ctx context.Context) error {
 	}
 
 	if checkCustomerManagedResource(currentRule.Annotations) {
-		c.WithField("prometheusrule", formatMeta(c.ObjectMeta)).Infof("Skipping update since object is customer managed.")
+		c.WithField("prometheusrule", formatMeta(c.ObjectMeta)).Info("Skipping update since object is customer managed.")
 		return nil
 	}
 
