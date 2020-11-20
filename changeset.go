@@ -236,7 +236,7 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 		retryPeriod = DefaultRetryPeriod
 	}
 
-	return retry(ctx, retryAttempts, retryPeriod, func() error {
+	return retry(ctx, retryAttempts, retryPeriod, func(ctx context.Context) error {
 		for _, op := range tr.Spec.Items {
 			switch op.Status {
 			case OpStatusCreated:
@@ -2848,7 +2848,7 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		}
 	}
 	// wait for the controller to init by trying to list stuff
-	return retry(ctx, 30, time.Second, func() error {
+	return retry(ctx, 30, time.Second, func(ctx context.Context) error {
 		_, err := cs.list(ctx, DefaultNamespace)
 		return err
 	})

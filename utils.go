@@ -34,7 +34,7 @@ const (
 type StatusReporter interface {
 	// Status returns the state of the resource.
 	// Returns nil if successful (created/deleted/updated), otherwise an error
-	Status() error
+	Status(ctx context.Context) error
 	// Infof logs the specified message and arguments in context of this resource
 	Infof(message string, args ...interface{})
 }
@@ -121,11 +121,11 @@ func CollectPods(ctx context.Context, namespace string, matchLabels map[string]s
 	return pods, nil
 }
 
-func retry(ctx context.Context, times int, period time.Duration, fn func() error) error {
+func retry(ctx context.Context, times int, period time.Duration, fn func(ctx context.Context) error) error {
 	if times < 1 {
 		return nil
 	}
-	err := fn()
+	err := fn(ctx)
 	for i := 1; i < times && err != nil; i += 1 {
 		log.Infof("attempt %v, result: %v, retry in %v", i+1, trace.DebugReport(err), period)
 		select {
@@ -134,7 +134,7 @@ func retry(ctx context.Context, times int, period time.Duration, fn func() error
 			return err
 		case <-time.After(period):
 		}
-		err = fn()
+		err = fn(ctx)
 	}
 	return err
 }
