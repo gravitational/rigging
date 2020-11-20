@@ -19,7 +19,7 @@ import (
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/extensions/v1beta1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -41,7 +41,7 @@ func NewPodSecurityPolicyControl(config PodSecurityPolicyConfig) (*PodSecurityPo
 // PodSecurityPolicyConfig defines controller configuration
 type PodSecurityPolicyConfig struct {
 	// PodSecurityPolicy is the existing pod security policy
-	*v1beta1.PodSecurityPolicy
+	*policyv1beta1.PodSecurityPolicy
 	// Client is k8s client
 	Client *kubernetes.Clientset
 }
@@ -103,9 +103,9 @@ func (c *PodSecurityPolicyControl) Status() error {
 	return ConvertError(err)
 }
 
-func updateTypeMetaPodSecurityPolicy(r *v1beta1.PodSecurityPolicy) {
+func updateTypeMetaPodSecurityPolicy(r *policyv1beta1.PodSecurityPolicy) {
 	r.Kind = KindPodSecurityPolicy
 	if r.APIVersion == "" {
-		r.APIVersion = v1beta1.SchemeGroupVersion.String()
+		r.APIVersion = policyv1beta1.SchemeGroupVersion.String()
 	}
 }
