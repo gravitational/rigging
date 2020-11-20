@@ -95,14 +95,14 @@ func PollStatus(ctx context.Context, retryAttempts int, retryPeriod time.Duratio
 }
 
 // CollectPods collects pods matched by fn
-func CollectPods(namespace string, matchLabels map[string]string, logger log.FieldLogger, client *kubernetes.Clientset,
+func CollectPods(ctx context.Context, namespace string, matchLabels map[string]string, logger log.FieldLogger, client *kubernetes.Clientset,
 	fn func(metav1.OwnerReference) bool) (map[string]v1.Pod, error) {
 	set := make(labels.Set)
 	for key, val := range matchLabels {
 		set[key] = val
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(metav1.ListOptions{
+	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: set.AsSelector().String(),
 	})
 	if err != nil {
@@ -299,35 +299,35 @@ func withExponentialBackoff(fn func() error) error {
 	return trace.Wrap(err)
 }
 
-func deletePodsList(podIface corev1.PodInterface, pods []v1.Pod, logger log.FieldLogger) error {
+func deletePodsList(ctx context.Context, podIface corev1.PodInterface, pods []v1.Pod, logger log.FieldLogger) error {
 	for _, pod := range pods {
 		logger.Debugf("deleting pod %v", pod.Name)
-		err := ConvertError(podIface.Delete(pod.Name, nil))
+		err := ConvertError(podIface.Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 		if err != nil && !trace.IsNotFound(err) {
 			return ConvertError(err)
 		}
 	}
 
-	return trace.Wrap(waitForPodsList(podIface, pods))
+	return trace.Wrap(waitForPodsList(ctx, podIface, pods))
 }
 
-func deletePods(podIface corev1.PodInterface, pods map[string]v1.Pod, logger log.FieldLogger) error {
+func deletePods(ctx context.Context, podIface corev1.PodInterface, pods map[string]v1.Pod, logger log.FieldLogger) error {
 	for _, pod := range pods {
 		logger.Debugf("deleting pod %v", pod.Name)
-		err := ConvertError(podIface.Delete(pod.Name, nil))
+		err := ConvertError(podIface.Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 		if err != nil && !trace.IsNotFound(err) {
 			return ConvertError(err)
 		}
 	}
 
-	return trace.Wrap(waitForPods(podIface, pods))
+	return trace.Wrap(waitForPods(ctx, podIface, pods))
 }
 
-func waitForPodsList(podIface corev1.PodInterface, pods []v1.Pod) error {
+func waitForPodsList(ctx context.Context, podIface corev1.PodInterface, pods []v1.Pod) error {
 	var errors []error
 	for _, pod := range pods {
 		err := waitForObjectDeletion(func() error {
-			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			_, err := podIface.Get(ctx, pod.Name, metav1.GetOptions{})
 			return ConvertError(err)
 		})
 		if err != nil {
@@ -337,11 +337,11 @@ func waitForPodsList(podIface corev1.PodInterface, pods []v1.Pod) error {
 	return trace.NewAggregate(errors...)
 }
 
-func waitForPods(podIface corev1.PodInterface, pods map[string]v1.Pod) error {
+func waitForPods(ctx context.Context, podIface corev1.PodInterface, pods map[string]v1.Pod) error {
 	var errors []error
 	for _, pod := range pods {
 		err := waitForObjectDeletion(func() error {
-			_, err := podIface.Get(pod.Name, metav1.GetOptions{})
+			_, err := podIface.Get(ctx, pod.Name, metav1.GetOptions{})
 			return ConvertError(err)
 		})
 		if err != nil {

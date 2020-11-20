@@ -67,24 +67,24 @@ type PodSecurityPolicyControl struct {
 func (c *PodSecurityPolicyControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.ExtensionsV1beta1().PodSecurityPolicies().Delete(c.Name, nil)
+	err := c.Client.ExtensionsV1beta1().PodSecurityPolicies().Delete(ctx, c.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
 func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	policies := c.Client.ExtensionsV1beta1().PodSecurityPolicies()
+	policies := c.Client.PolicyV1beta1().PodSecurityPolicies()
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	existing, err := policies.Get(c.Name, metav1.GetOptions{})
+	existing, err := policies.Get(ctx, c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = policies.Create(c.PodSecurityPolicy)
+		_, err = policies.Create(ctx, c.PodSecurityPolicy, metav1.CreateOptions{})
 		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
 	}
 
@@ -93,13 +93,13 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = policies.Update(c.PodSecurityPolicy)
+	_, err = policies.Update(ctx, c.PodSecurityPolicy, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
-func (c *PodSecurityPolicyControl) Status() error {
+func (c *PodSecurityPolicyControl) Status(ctx context.Context) error {
 	policies := c.Client.ExtensionsV1beta1().PodSecurityPolicies()
-	_, err := policies.Get(c.Name, metav1.GetOptions{})
+	_, err := policies.Get(ctx, c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 

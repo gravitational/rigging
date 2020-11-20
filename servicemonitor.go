@@ -17,9 +17,9 @@ package rigging
 import (
 	"context"
 
+	"github.com/gravitational/trace"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
-	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -67,7 +67,7 @@ type ServiceMonitorControl struct {
 func (c *ServiceMonitorControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ServiceMonitor.ObjectMeta))
 
-	err := c.Client.MonitoringV1().ServiceMonitors(c.ServiceMonitor.Namespace).Delete(c.ServiceMonitor.Name, nil)
+	err := c.Client.MonitoringV1().ServiceMonitors(c.ServiceMonitor.Namespace).Delete(ctx, c.ServiceMonitor.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
@@ -78,13 +78,13 @@ func (c *ServiceMonitorControl) Upsert(ctx context.Context) error {
 	c.ServiceMonitor.UID = ""
 	c.ServiceMonitor.SelfLink = ""
 	c.ServiceMonitor.ResourceVersion = ""
-	currentServiceMonitor, err := serviceMonitorsClient.Get(c.ServiceMonitor.Name, metav1.GetOptions{})
+	currentServiceMonitor, err := serviceMonitorsClient.Get(ctx, c.ServiceMonitor.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = serviceMonitorsClient.Create(c.ServiceMonitor)
+		_, err = serviceMonitorsClient.Create(ctx, c.ServiceMonitor, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -94,13 +94,13 @@ func (c *ServiceMonitorControl) Upsert(ctx context.Context) error {
 	}
 
 	c.ServiceMonitor.ResourceVersion = currentServiceMonitor.ResourceVersion
-	_, err = serviceMonitorsClient.Update(c.ServiceMonitor)
+	_, err = serviceMonitorsClient.Update(ctx, c.ServiceMonitor, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
-func (c *ServiceMonitorControl) Status() error {
+func (c *ServiceMonitorControl) Status(ctx context.Context) error {
 	client := c.Client.MonitoringV1().ServiceMonitors(c.ServiceMonitor.Namespace)
-	_, err := client.Get(c.ServiceMonitor.Name, metav1.GetOptions{})
+	_, err := client.Get(ctx, c.ServiceMonitor.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 

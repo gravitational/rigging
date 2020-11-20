@@ -17,7 +17,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.19.2
 	k8s.io/apimachinery v0.19.4
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/kube-aggregator v0.0.0-20191016112429-9587704a8ad4
+	k8s.io/kube-aggregator v0.19.4
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.19.4

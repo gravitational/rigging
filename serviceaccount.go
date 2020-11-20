@@ -67,7 +67,7 @@ type ServiceAccountControl struct {
 func (c *ServiceAccountControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.CoreV1().ServiceAccounts(c.Namespace).Delete(c.Name, nil)
+	err := c.Client.CoreV1().ServiceAccounts(c.Namespace).Delete(ctx, c.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
@@ -78,13 +78,13 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	existing, err := accounts.Get(c.Name, metav1.GetOptions{})
+	existing, err := accounts.Get(ctx, c.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = accounts.Create(c.ServiceAccount)
+		_, err = accounts.Create(ctx, c.ServiceAccount, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -93,13 +93,13 @@ func (c *ServiceAccountControl) Upsert(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = accounts.Update(c.ServiceAccount)
+	_, err = accounts.Update(ctx, c.ServiceAccount, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
-func (c *ServiceAccountControl) Status() error {
+func (c *ServiceAccountControl) Status(ctx context.Context) error {
 	accounts := c.Client.CoreV1().ServiceAccounts(c.Namespace)
-	_, err := accounts.Get(c.Name, metav1.GetOptions{})
+	_, err := accounts.Get(ctx, c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 

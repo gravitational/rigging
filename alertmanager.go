@@ -17,9 +17,9 @@ package rigging
 import (
 	"context"
 
+	"github.com/gravitational/trace"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
-	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -63,13 +63,15 @@ type AlertmanagerControl struct {
 	log.FieldLogger
 }
 
+// Delete will delete an AlertManager resource
 func (c *AlertmanagerControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.Alertmanager.ObjectMeta))
 
-	err := c.Client.MonitoringV1().Alertmanagers(c.Alertmanager.Namespace).Delete(c.Alertmanager.Name, nil)
+	err := c.Client.MonitoringV1().Alertmanagers(c.Alertmanager.Namespace).Delete(ctx, c.Alertmanager.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
+// Upsert will Update or Insert an AlertManager resource
 func (c *AlertmanagerControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.Alertmanager.ObjectMeta))
 
@@ -77,13 +79,14 @@ func (c *AlertmanagerControl) Upsert(ctx context.Context) error {
 	c.Alertmanager.UID = ""
 	c.Alertmanager.SelfLink = ""
 	c.Alertmanager.ResourceVersion = ""
-	currentAlertmanager, err := client.Get(c.Alertmanager.Name, metav1.GetOptions{})
+	currentAlertmanager, err := client.Get(ctx, c.Alertmanager.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = client.Create(c.Alertmanager)
+
+		_, err = client.Create(ctx, c.Alertmanager, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -93,13 +96,14 @@ func (c *AlertmanagerControl) Upsert(ctx context.Context) error {
 	}
 
 	c.Alertmanager.ResourceVersion = currentAlertmanager.ResourceVersion
-	_, err = client.Update(c.Alertmanager)
+	_, err = client.Update(ctx, c.Alertmanager, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
-func (c *AlertmanagerControl) Status() error {
+// Status return status 
+func (c *AlertmanagerControl) Status(ctx context.Context) error {
 	client := c.Client.MonitoringV1().Alertmanagers(c.Alertmanager.Namespace)
-	_, err := client.Get(c.Alertmanager.Name, metav1.GetOptions{})
+	_, err := client.Get(ctx, c.Alertmanager.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
