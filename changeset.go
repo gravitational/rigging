@@ -24,9 +24,9 @@ import (
 	"strings"
 	"time"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	monitoring "github.com/coreos/prometheus-operator/pkg/client/versioned"
-	monitoring_scheme "github.com/coreos/prometheus-operator/pkg/client/versioned/scheme"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	monitoring_scheme "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned/scheme"
 	goyaml "github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
