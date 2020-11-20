@@ -21,7 +21,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -68,7 +67,7 @@ type DSControl struct {
 }
 
 // collectPods returns pods created by this daemon set
-func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
+func (c *DSControl) collectPods(daemonSet *appsv1.DaemonSet) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if daemonSet.Spec.Selector != nil {
 		labels = daemonSet.Spec.Selector.MatchLabels
@@ -197,6 +196,6 @@ func (c *DSControl) Status() error {
 func updateTypeMetaDaemonset(r *appsv1.DaemonSet) {
 	r.Kind = KindDaemonSet
 	if r.APIVersion == "" {
-		r.APIVersion = v1beta1.SchemeGroupVersion.String()
+		r.APIVersion = appsv1.SchemeGroupVersion.String()
 	}
 }
