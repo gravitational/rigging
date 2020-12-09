@@ -383,6 +383,12 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	})
 	for i := len(tr.Spec.Items) - 1; i >= 0; i-- {
 		op := &tr.Spec.Items[i]
+
+		// Reentrancy: skip any phases that may already be reverted by a previous rollback
+		if op.Status == OpStatusReverted {
+			continue
+		}
+
 		info, err := GetOperationInfo(*op)
 		if err != nil {
 			return trace.Wrap(err)
