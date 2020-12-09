@@ -92,7 +92,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	c.Info("deleting current daemon set")
+	c.Debug("deleting current daemon set")
 	deletePolicy := metav1.DeletePropagationForeground
 	err = daemons.Delete(c.DaemonSet.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
@@ -126,7 +126,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		// api always returns object, this is inconvenent
+		// api always returns object, this is inconvenient
 		currentDS = nil
 	}
 
@@ -146,7 +146,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 		}
 	}
 
-	c.Info("creating new daemon set")
+	c.Debug("creating new daemon set")
 	c.DaemonSet.UID = ""
 	c.DaemonSet.SelfLink = ""
 	c.DaemonSet.ResourceVersion = ""
