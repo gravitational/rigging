@@ -130,7 +130,7 @@ type Changeset struct {
 func (cs *Changeset) Upsert(ctx context.Context, changesetNamespace, changesetName string, data []byte) error {
 	// To support re-entrant calls to Upsert, we need to check to see if the last operation in the changeset is
 	// incomplete. If it is incomplete, we roll it back before continuing.
-	err := cs.RevertIncompleteOperation(ctx, changesetNamespace, changesetName)
+	err := cs.revertIncompleteOperation(ctx, changesetNamespace, changesetName)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -244,7 +244,7 @@ func (cs *Changeset) Status(ctx context.Context, changesetNamespace, changesetNa
 	}
 
 	// If any operation in the changeset is incomplete, the status won't update in the retry loop to be complete.
-	// So early exit if the changeset will not pass the status check in it's current state.
+	// So early exit if the changeset will not pass the status check in its current state.
 	for _, op := range tr.Spec.Items {
 		if op.Status == OpStatusCreated {
 			return trace.BadParameter("%v is not completed yet. Changelog needs to be rolled back.", tr)
@@ -407,8 +407,8 @@ func (cs *Changeset) Revert(ctx context.Context, changesetNamespace, changesetNa
 	return trace.Wrap(err)
 }
 
-// RevertIncompleteOperation checks and rollbacks the last operation in the changeset if it's incomplete.
-func (cs *Changeset) RevertIncompleteOperation(ctx context.Context, changesetNamespace, changesetName string) error {
+// revertIncompleteOperation checks and rolls back the last operation in the changeset if it's incomplete.
+func (cs *Changeset) revertIncompleteOperation(ctx context.Context, changesetNamespace, changesetName string) error {
 	tr, err := cs.get(changesetNamespace, changesetName)
 	if err != nil {
 		if trace.IsNotFound(err) {
@@ -430,25 +430,27 @@ func (cs *Changeset) RevertIncompleteOperation(ctx context.Context, changesetNam
 	})
 
 	op := &tr.Spec.Items[len(tr.Spec.Items)-1]
-	if op.Status == OpStatusCreated {
-		info, err := GetOperationInfo(*op)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+	if op.Status != OpStatusCreated {
+		return nil
+	}
 
-		log.Infof("Reverting incomplete changeset item %v, status: %v ", info, op.Status)
-		if err := cs.revert(ctx, op, info); err != nil {
-			return trace.Wrap(err)
-		}
+	info, err := GetOperationInfo(*op)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
-		// Remove the item from the changelog that we rolled back so `rig freeze` doesn't see the changelog as
-		// incomplete.
-		tr.Spec.Items = tr.Spec.Items[:len(tr.Spec.Items)-1]
+	log.Infof("Reverting incomplete changeset item %v, status: %v ", info, op.Status)
+	if err := cs.revert(ctx, op, info); err != nil {
+		return trace.Wrap(err)
+	}
 
-		tr, err = cs.update(tr)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+	// Remove the item from the changelog that we rolled back so `rig freeze` doesn't see the changelog as
+	// incomplete.
+	tr.Spec.Items = tr.Spec.Items[:len(tr.Spec.Items)-1]
+
+	tr, err = cs.update(tr)
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
 	return nil
