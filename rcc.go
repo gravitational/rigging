@@ -93,7 +93,7 @@ func (c *RCControl) Delete(ctx context.Context, cascade bool) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	c.Info("deleting current replication controller")
+	c.Debug("deleting current replication controller")
 	deletePolicy := metav1.DeletePropagationForeground
 	err = rcs.Delete(c.ReplicationController.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
