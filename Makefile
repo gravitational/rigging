@@ -52,7 +52,7 @@ docker-image: docker-build
 	  echo "TEMPDIR is not set"; exit 1; \
 	fi;
 	mkdir -p $(TEMPDIR)/build
-	BUILDDIR=$(TEMPDIR)/build $(MAKE) docker-build
+	cp build/rig $(TEMPDIR)/build/rig
 	cp -r docker/rig.dockerfile $(TEMPDIR)/Dockerfile
 	cd $(TEMPDIR) && docker build --pull -t $(IMAGE) .
 	rm -rf $(TEMPDIR)
