@@ -46,8 +46,8 @@ docker-test:
 		   /bin/bash -c "make -C $(DST) test"
 
 .PHONY: docker-image
-docker-image:
-	$(eval TEMPDIR = "$(shell mktemp -d)")
+docker-image: docker-build
+	$(eval TEMPDIR = "$(shell mktemp -d $(BUILDDIR)/tmp.XXXXXX)")
 	if [ -z "$(TEMPDIR)" ]; then \
 	  echo "TEMPDIR is not set"; exit 1; \
 	fi;
