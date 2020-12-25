@@ -59,7 +59,7 @@ docker-image: docker-build
 	rm -rf $(TEMPDIR)
 
 .PHONY: publish-docker-image
-publish-docker-image:
+publish-docker-image: docker-image
 	docker push $(IMAGE)
 
 
