@@ -71,13 +71,13 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.Deployment.ObjectMeta))
 
 	deployments := c.Client.AppsV1().Deployments(c.Deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
+	currentDeployment, err := deployments.Get(ctx, c.Deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
 
 	pods := c.Client.CoreV1().Pods(c.Deployment.Namespace)
-	currentPods, err := c.collectPods(currentDeployment)
+	currentPods, err := c.collectPods(ctx, currentDeployment)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -86,13 +86,13 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 		// scale deployment down to delete the pods
 		var replicas int32
 		currentDeployment.Spec.Replicas = &replicas
-		currentDeployment, err = deployments.Update(currentDeployment)
+		currentDeployment, err = deployments.Update(ctx, currentDeployment, metav1.UpdateOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
 	}
 	deletePolicy := metav1.DeletePropagationForeground
-	err = deployments.Delete(c.Deployment.Name, &metav1.DeleteOptions{
+	err = deployments.Delete(ctx, c.Deployment.Name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	err = waitForObjectDeletion(func() error {
-		_, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
+		_, err := deployments.Get(ctx, c.Deployment.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
 	if err != nil {
@@ -108,7 +108,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	// wait until all Pods have been cleaned up
-	err = waitForPods(pods, currentPods)
+	err = waitForPods(ctx, pods, currentPods)
 	if err != nil {
 		c.Warningf("failed to wait for Pods to clean up: %v", trace.DebugReport(err))
 	}
@@ -122,13 +122,13 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 	c.Deployment.UID = ""
 	c.Deployment.SelfLink = ""
 	c.Deployment.ResourceVersion = ""
-	existing, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
+	existing, err := deployments.Get(ctx, c.Deployment.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
-		_, err = deployments.Create(c.Deployment)
+		_, err = deployments.Create(ctx, c.Deployment, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -137,7 +137,7 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = deployments.Update(c.Deployment)
+	_, err = deployments.Update(ctx, c.Deployment, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
@@ -149,9 +149,9 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *DeploymentControl) Status() error {
+func (c *DeploymentControl) Status(ctx context.Context) error {
 	deployments := c.Client.ExtensionsV1beta1().Deployments(c.Deployment.Namespace)
-	currentDeployment, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
+	currentDeployment, err := deployments.Get(ctx, c.Deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -171,12 +171,12 @@ func (c *DeploymentControl) Status() error {
 	return nil
 }
 
-func (c *DeploymentControl) collectPods(deployment *appsv1.Deployment) (map[string]v1.Pod, error) {
+func (c *DeploymentControl) collectPods(ctx context.Context, deployment *appsv1.Deployment) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if deployment.Spec.Selector != nil {
 		labels = deployment.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(deployment.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
+	pods, err := CollectPods(ctx, deployment.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindDeployment && ref.UID == deployment.UID
 	})
 	return pods, ConvertError(err)

@@ -68,12 +68,12 @@ type DSControl struct {
 }
 
 // collectPods returns pods created by this daemon set
-func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
+func (c *DSControl) collectPods(ctx context.Context, daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if daemonSet.Spec.Selector != nil {
 		labels = daemonSet.Spec.Selector.MatchLabels
 	}
-	pods, err := CollectPods(daemonSet.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
+	pods, err := CollectPods(ctx, daemonSet.Namespace, labels, c.FieldLogger, c.Client, func(ref metav1.OwnerReference) bool {
 		return ref.Kind == KindDaemonSet && ref.UID == daemonSet.UID
 	})
 	return pods, trace.Wrap(err)
@@ -83,18 +83,18 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.DaemonSet.ObjectMeta))
 
 	daemons := c.Client.ExtensionsV1beta1().DaemonSets(c.DaemonSet.Namespace)
-	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
+	currentDS, err := daemons.Get(ctx, c.DaemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
 	pods := c.Client.CoreV1().Pods(c.DaemonSet.Namespace)
-	currentPods, err := c.collectPods(currentDS)
+	currentPods, err := c.collectPods(ctx, currentDS)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	c.Debug("deleting current daemon set")
 	deletePolicy := metav1.DeletePropagationForeground
-	err = daemons.Delete(c.DaemonSet.Name, &metav1.DeleteOptions{
+	err = daemons.Delete(ctx, c.DaemonSet.Name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	}
 
 	err = waitForObjectDeletion(func() error {
-		_, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
+		_, err := daemons.Get(ctx, c.DaemonSet.Name, metav1.GetOptions{})
 		return ConvertError(err)
 	})
 	if err != nil {
@@ -112,7 +112,7 @@ func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	if !cascade {
 		c.Info("cascade not set, returning")
 	}
-	err = deletePods(pods, currentPods, c.FieldLogger)
+	err = deletePods(ctx, pods, currentPods, c.FieldLogger)
 	return trace.Wrap(err)
 }
 
@@ -120,7 +120,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.DaemonSet.ObjectMeta))
 
 	daemons := c.Client.AppsV1().DaemonSets(c.DaemonSet.Namespace)
-	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
+	currentDS, err := daemons.Get(ctx, c.DaemonSet.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsNotFound(err) {
@@ -152,7 +152,7 @@ func (c *DSControl) Upsert(ctx context.Context) error {
 	c.DaemonSet.ResourceVersion = ""
 
 	err = withExponentialBackoff(func() error {
-		_, err = daemons.Create(c.DaemonSet)
+		_, err = daemons.Create(ctx, c.DaemonSet, metav1.CreateOptions{})
 		return ConvertError(err)
 	})
 	return trace.Wrap(err)
@@ -166,19 +166,19 @@ func (c *DSControl) nodeSelector() labels.Selector {
 	return set.AsSelector()
 }
 
-func (c *DSControl) Status() error {
+func (c *DSControl) Status(ctx context.Context) error {
 	daemons := c.Client.ExtensionsV1beta1().DaemonSets(c.DaemonSet.Namespace)
-	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
+	currentDS, err := daemons.Get(ctx, c.DaemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
 
-	currentPods, err := c.collectPods(currentDS)
+	currentPods, err := c.collectPods(ctx, currentDS)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	nodes, err := c.Client.CoreV1().Nodes().List(metav1.ListOptions{
+	nodes, err := c.Client.CoreV1().Nodes().List(ctx, metav1.ListOptions{
 		LabelSelector: c.nodeSelector().String(),
 	})
 	if err != nil {

@@ -67,7 +67,7 @@ type ValidatingWebhookConfigurationControl struct {
 // Delete deletes the resource.
 func (c *ValidatingWebhookConfigurationControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
-	err := c.client().Delete(c.Name, nil)
+	err := c.client().Delete(ctx, c.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
@@ -77,12 +77,12 @@ func (c *ValidatingWebhookConfigurationControl) Upsert(ctx context.Context) erro
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	currentWebhook, err := c.client().Get(c.Name, metav1.GetOptions{})
+	currentWebhook, err := c.client().Get(ctx, c.Name, metav1.GetOptions{})
 	if err != nil {
 		if !trace.IsNotFound(ConvertError(err)) {
 			return trace.Wrap(err)
 		}
-		_, err = c.client().Create(c.ValidatingWebhookConfiguration)
+		_, err = c.client().Create(ctx, c.ValidatingWebhookConfiguration, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -92,13 +92,13 @@ func (c *ValidatingWebhookConfigurationControl) Upsert(ctx context.Context) erro
 	}
 
 	c.ResourceVersion = currentWebhook.ResourceVersion
-	_, err = c.client().Update(c.ValidatingWebhookConfiguration)
+	_, err = c.client().Update(ctx, c.ValidatingWebhookConfiguration, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
 // Status checks whether the resource exists.
-func (c *ValidatingWebhookConfigurationControl) Status() error {
-	_, err := c.client().Get(c.Name, metav1.GetOptions{})
+func (c *ValidatingWebhookConfigurationControl) Status(ctx context.Context) error {
+	_, err := c.client().Get(ctx, c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
@@ -148,7 +148,7 @@ type MutatingWebhookConfigurationControl struct {
 // Delete deletes the resource.
 func (c *MutatingWebhookConfigurationControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
-	err := c.client().Delete(c.Name, nil)
+	err := c.client().Delete(ctx, c.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
@@ -158,12 +158,12 @@ func (c *MutatingWebhookConfigurationControl) Upsert(ctx context.Context) error 
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
-	currentWebhook, err := c.client().Get(c.Name, metav1.GetOptions{})
+	currentWebhook, err := c.client().Get(ctx, c.Name, metav1.GetOptions{})
 	if err != nil {
 		if !trace.IsNotFound(ConvertError(err)) {
 			return trace.Wrap(err)
 		}
-		_, err = c.client().Create(c.MutatingWebhookConfiguration)
+		_, err = c.client().Create(ctx, c.MutatingWebhookConfiguration, metav1.CreateOptions{})
 		return ConvertError(err)
 	}
 
@@ -173,13 +173,13 @@ func (c *MutatingWebhookConfigurationControl) Upsert(ctx context.Context) error 
 	}
 
 	c.ResourceVersion = currentWebhook.ResourceVersion
-	_, err = c.client().Update(c.MutatingWebhookConfiguration)
+	_, err = c.client().Update(ctx, c.MutatingWebhookConfiguration, metav1.UpdateOptions{})
 	return ConvertError(err)
 }
 
 // Status checks whether the resource exists.
-func (c *MutatingWebhookConfigurationControl) Status() error {
-	_, err := c.client().Get(c.Name, metav1.GetOptions{})
+func (c *MutatingWebhookConfigurationControl) Status(ctx context.Context) error {
+	_, err := c.client().Get(ctx, c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
