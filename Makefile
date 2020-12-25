@@ -5,19 +5,19 @@ all: install
 # install installs binary
 .PHONY: install
 install:
-	go install github.com/gravitational/rigging/tool/rig
+	go install -mod=vendor github.com/gravitational/rigging/tool/rig
 
 BUILDDIR ?= $(abspath build)
 
 .PHONY: build
 build:
-	go build -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
+	go build -mod=vendor -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
 
 .PHONY: test
 test:
-	go test -v ./ ./tool/...
+	go test -mod=vendor -v ./ ./tool/...
 
-BUILDBOX := quay.io/gravitational/debian-venti:go1.12.9-buster
+BUILDBOX := quay.io/gravitational/debian-venti:go1.14.13-buster
 
 # Directory with sources inside the container
 DST := /gopath/src/github.com/gravitational/rigging
