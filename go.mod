@@ -10,6 +10,7 @@ require (
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348
 	github.com/sirupsen/logrus v1.6.0
+	golang.org/dl v0.0.0-20201217181409-aeefed14b4e2 // indirect
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
@@ -22,7 +23,7 @@ require (
 )
 
 replace (
-	github.com/coreos/prometheus-operator => github.com/gravitational/prometheus-operator v0.35.2
+	github.com/coreos/prometheus-operator => github.com/gravitational/prometheus-operator v0.40.1
 	github.com/sirupsen/logrus => github.com/gravitational/logrus v0.10.1-0.20180402202453-dcdb95d728db
 	k8s.io/client-go => k8s.io/client-go v0.19.6
 )
