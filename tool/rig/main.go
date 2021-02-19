@@ -438,7 +438,7 @@ func csDelete(ctx context.Context, client *kubernetes.Clientset, config *rest.Co
 
 // InitLoggerCLI tools by default log into syslog, not stderr
 func InitLoggerCLI() {
-	log.SetLevel(log.WarnLevel)
+	log.SetLevel(log.InfoLevel)
 	// clear existing hooks:
 	log.StandardLogger().Hooks = make(log.LevelHooks)
 	log.SetFormatter(&trace.TextFormatter{})

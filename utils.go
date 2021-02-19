@@ -366,5 +366,5 @@ func waitForObjectDeletion(fn func() error) error {
 
 const (
 	deletePollInterval = 1 * time.Second
-	deleteTimeout      = 5 * time.Minute
+	deleteTimeout      = 10 * time.Minute
 )
