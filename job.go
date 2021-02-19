@@ -54,7 +54,7 @@ func (c *JobControl) Delete(ctx context.Context, cascade bool) error {
 		return trace.Wrap(err)
 	}
 
-	c.Info("deleting current job")
+	c.Debug("deleting current job")
 	deletePolicy := metav1.DeletePropagationForeground
 	err = jobs.Delete(c.Job.Name, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
@@ -108,7 +108,7 @@ func (c *JobControl) Upsert(ctx context.Context) error {
 		}
 	}
 
-	c.Info("creating new job")
+	c.Debug("creating new job")
 	c.Job.UID = ""
 	c.Job.SelfLink = ""
 	c.Job.ResourceVersion = ""
