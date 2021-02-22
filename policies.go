@@ -16,11 +16,11 @@ package rigging
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/policy/v1beta1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -74,6 +74,7 @@ func (c *PodSecurityPolicyControl) Delete(ctx context.Context, cascade bool) err
 
 func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
+	fmt.Println(formatMeta(c.ObjectMeta))
 
 	policies := c.Client.PolicyV1beta1().PodSecurityPolicies()
 	c.UID = ""
@@ -85,6 +86,7 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 		if !trace.IsNotFound(err) {
 			return trace.Wrap(err)
 		}
+		fmt.Println(c.PodSecurityPolicy)
 		_, err = policies.Create(c.PodSecurityPolicy)
 		return ConvertErrorWithContext(err, "cannot create pod security policy %q", formatMeta(c.ObjectMeta))
 	}
