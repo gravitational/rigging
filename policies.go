@@ -19,7 +19,7 @@ import (
 
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -67,14 +67,14 @@ type PodSecurityPolicyControl struct {
 func (c *PodSecurityPolicyControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.ObjectMeta))
 
-	err := c.Client.ExtensionsV1beta1().PodSecurityPolicies().Delete(c.Name, nil)
+	err := c.Client.PolicyV1beta1().PodSecurityPolicies().Delete(c.Name, nil)
 	return ConvertError(err)
 }
 
 func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.ObjectMeta))
 
-	policies := c.Client.ExtensionsV1beta1().PodSecurityPolicies()
+	policies := c.Client.PolicyV1beta1().PodSecurityPolicies()
 	c.UID = ""
 	c.SelfLink = ""
 	c.ResourceVersion = ""
@@ -98,7 +98,7 @@ func (c *PodSecurityPolicyControl) Upsert(ctx context.Context) error {
 }
 
 func (c *PodSecurityPolicyControl) Status() error {
-	policies := c.Client.ExtensionsV1beta1().PodSecurityPolicies()
+	policies := c.Client.PolicyV1beta1().PodSecurityPolicies()
 	_, err := policies.Get(c.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
