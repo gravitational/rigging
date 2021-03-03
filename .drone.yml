@@ -64,12 +64,7 @@ name: publish
 
 trigger:
   event:
-  - push
   - tag
-  branch:
-  - master
-  - version/**
-
 
 steps:
   - name: fetch tags
