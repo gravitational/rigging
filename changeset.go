@@ -843,7 +843,7 @@ func (cs *Changeset) statusPodSecurityPolicy(ctx context.Context, data []byte, u
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(policy.Name, metav1.GetOptions{})
+		existing, err := cs.Client.PolicyV1beta1().PodSecurityPolicies().Get(policy.Name, metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -1394,7 +1394,7 @@ func (cs *Changeset) deleteClusterRoleBinding(ctx context.Context, tr *Changeset
 }
 
 func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	policy, err := cs.Client.ExtensionsV1beta1().PodSecurityPolicies().Get(name, metav1.GetOptions{})
+	policy, err := cs.Client.PolicyV1beta1().PodSecurityPolicies().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -2772,7 +2772,7 @@ func (cs *Changeset) upsertPodSecurityPolicy(ctx context.Context, tr *ChangesetR
 		"cs":                  tr.String(),
 		"pod_security_policy": formatMeta(policy.ObjectMeta),
 	})
-	policies := cs.Client.ExtensionsV1beta1().PodSecurityPolicies()
+	policies := cs.Client.PolicyV1beta1().PodSecurityPolicies()
 	current, err := policies.Get(policy.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
