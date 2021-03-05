@@ -21,7 +21,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -68,7 +67,7 @@ type DSControl struct {
 }
 
 // collectPods returns pods created by this daemon set
-func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod, error) {
+func (c *DSControl) collectPods(daemonSet *appsv1.DaemonSet) (map[string]v1.Pod, error) {
 	var labels map[string]string
 	if daemonSet.Spec.Selector != nil {
 		labels = daemonSet.Spec.Selector.MatchLabels
@@ -82,7 +81,7 @@ func (c *DSControl) collectPods(daemonSet *v1beta1.DaemonSet) (map[string]v1.Pod
 func (c *DSControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.DaemonSet.ObjectMeta))
 
-	daemons := c.Client.ExtensionsV1beta1().DaemonSets(c.DaemonSet.Namespace)
+	daemons := c.Client.AppsV1().DaemonSets(c.DaemonSet.Namespace)
 	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
@@ -167,7 +166,7 @@ func (c *DSControl) nodeSelector() labels.Selector {
 }
 
 func (c *DSControl) Status() error {
-	daemons := c.Client.ExtensionsV1beta1().DaemonSets(c.DaemonSet.Namespace)
+	daemons := c.Client.AppsV1().DaemonSets(c.DaemonSet.Namespace)
 	currentDS, err := daemons.Get(c.DaemonSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
@@ -197,6 +196,6 @@ func (c *DSControl) Status() error {
 func updateTypeMetaDaemonset(r *appsv1.DaemonSet) {
 	r.Kind = KindDaemonSet
 	if r.APIVersion == "" {
-		r.APIVersion = v1beta1.SchemeGroupVersion.String()
+		r.APIVersion = appsv1.SchemeGroupVersion.String()
 	}
 }

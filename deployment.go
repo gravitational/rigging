@@ -21,7 +21,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -150,7 +149,7 @@ func (c *DeploymentControl) nodeSelector() labels.Selector {
 }
 
 func (c *DeploymentControl) Status() error {
-	deployments := c.Client.ExtensionsV1beta1().Deployments(c.Deployment.Namespace)
+	deployments := c.Client.AppsV1().Deployments(c.Deployment.Namespace)
 	currentDeployment, err := deployments.Get(c.Deployment.Name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
@@ -185,6 +184,6 @@ func (c *DeploymentControl) collectPods(deployment *appsv1.Deployment) (map[stri
 func updateTypeMetaDeployment(r *appsv1.Deployment) {
 	r.Kind = KindDeployment
 	if r.APIVersion == "" {
-		r.APIVersion = v1beta1.SchemeGroupVersion.String()
+		r.APIVersion = appsv1.SchemeGroupVersion.String()
 	}
 }
