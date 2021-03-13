@@ -22,7 +22,7 @@ require (
 )
 
 replace (
-	github.com/coreos/prometheus-operator => github.com/gravitational/prometheus-operator v0.35.2
+	github.com/coreos/prometheus-operator => github.com/gravitational/prometheus-operator v0.40.1
 	github.com/sirupsen/logrus => github.com/gravitational/logrus v0.10.1-0.20180402202453-dcdb95d728db
 	k8s.io/client-go => k8s.io/client-go v0.19.8
 )
