@@ -48,6 +48,9 @@ const (
 // Prometheus defines a Prometheus deployment.
 // +genclient
 // +k8s:openapi-gen=true
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version",description="The version of Prometheus"
+// +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".spec.replicas",description="The desired replicas number of Prometheuses"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Prometheus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -86,6 +89,8 @@ type PrometheusSpec struct {
 	// check own namespace.
 	ServiceMonitorNamespaceSelector *metav1.LabelSelector `json:"serviceMonitorNamespaceSelector,omitempty"`
 	// *Experimental* PodMonitors to be selected for target discovery.
+	// *Deprecated:* if neither this nor serviceMonitorSelector are specified,
+	// configuration is unmanaged.
 	PodMonitorSelector *metav1.LabelSelector `json:"podMonitorSelector,omitempty"`
 	// Namespaces to be selected for PodMonitor discovery. If nil, only
 	// check own namespace.
@@ -139,6 +144,8 @@ type PrometheusSpec struct {
 	LogFormat string `json:"logFormat,omitempty"`
 	// Interval between consecutive scrapes.
 	ScrapeInterval string `json:"scrapeInterval,omitempty"`
+	// Number of seconds to wait for target to respond before erroring.
+	ScrapeTimeout string `json:"scrapeTimeout,omitempty"`
 	// Interval between consecutive evaluations.
 	EvaluationInterval string `json:"evaluationInterval,omitempty"`
 	// /--rules.*/ command-line arguments.
@@ -169,7 +176,11 @@ type PrometheusSpec struct {
 	// Volumes allows configuration of additional volumes on the output StatefulSet definition. Volumes specified will
 	// be appended to other volumes that are generated as a result of StorageSpec objects.
 	Volumes []v1.Volume `json:"volumes,omitempty"`
-	// A selector to select which PrometheusRules to mount for loading alerting
+	// VolumeMounts allows configuration of additional VolumeMounts on the output StatefulSet definition.
+	// VolumeMounts specified will be appended to other VolumeMounts in the prometheus container,
+	// that are generated as a result of StorageSpec objects.
+	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
+	// A selector to select which PrometheusRules to mount for loading alerting/recording
 	// rules from. Until (excluding) Prometheus Operator v0.24.0 Prometheus
 	// Operator will migrate any legacy rule ConfigMaps to PrometheusRule custom
 	// resources selected by RuleSelector. Make sure it does not match any config
@@ -297,6 +308,33 @@ type PrometheusSpec struct {
 	// and metric that is user created. The label value will always be the namespace of the object that is
 	// being created.
 	EnforcedNamespaceLabel string `json:"enforcedNamespaceLabel,omitempty"`
+	// PrometheusRulesExcludedFromEnforce - list of prometheus rules to be excluded from enforcing
+	// of adding namespace labels. Works only if enforcedNamespaceLabel set to true.
+	// Make sure both ruleNamespace and ruleName are set for each pair
+	PrometheusRulesExcludedFromEnforce []PrometheusRuleExcludeConfig `json:"prometheusRulesExcludedFromEnforce,omitempty"`
+	// QueryLogFile specifies the file to which PromQL queries are logged.
+	// Note that this location must be writable, and can be persisted using an attached volume.
+	// Alternatively, the location can be set to a stdout location such as `/dev/stdout` to log
+	// querie information to the default Prometheus log stream.
+	// This is only available in versions of Prometheus >= 2.16.0.
+	// For more details, see the Prometheus docs (https://prometheus.io/docs/guides/query-log/)
+	QueryLogFile string `json:"queryLogFile,omitempty"`
+	// EnforcedSampleLimit defines global limit on number of scraped samples
+	// that will be accepted. This overrides any SampleLimit set per
+	// ServiceMonitor or/and PodMonitor. It is meant to be used by admins to
+	// enforce the SampleLimit to keep overall number of samples/series under
+	// the desired limit.
+	// Note that if SampleLimit is lower that value will be taken instead.
+	EnforcedSampleLimit *uint64 `json:"enforcedSampleLimit,omitempty"`
+}
+
+// PrometheusRuleExcludeConfig enables users to configure excluded PrometheusRule names and their namespaces
+// to be ignored while enforcing namespace label for alerts and metrics.
+type PrometheusRuleExcludeConfig struct {
+	// RuleNamespace - namespace of excluded rule
+	RuleNamespace string `json:"ruleNamespace"`
+	// RuleNamespace - name of excluded rule
+	RuleName string `json:"ruleName"`
 }
 
 // ArbitraryFSAccessThroughSMsConfig enables users to configure, whether
@@ -344,6 +382,9 @@ type AlertingSpec struct {
 // If neither `emptyDir` nor `volumeClaimTemplate` is specified, then by default an [EmptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) will be used.
 // +k8s:openapi-gen=true
 type StorageSpec struct {
+	// Deprecated: subPath usage will be disabled by default in a future release, this option will become unnecessary.
+	// DisableMountSubPath allows to remove any subPath usage in volume mounts.
+	DisableMountSubPath bool `json:"disableMountSubPath,omitempty"`
 	// EmptyDirVolumeSource to be used by the Prometheus StatefulSets. If specified, used in place of any volumeClaimTemplate. More
 	// info: https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
 	EmptyDir *v1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
@@ -440,16 +481,33 @@ type ThanosSpec struct {
 	// ListenLocal makes the Thanos sidecar listen on loopback, so that it
 	// does not bind against the Pod IP.
 	ListenLocal bool `json:"listenLocal,omitempty"`
+	// TracingConfig configures tracing in Thanos. This is an experimental feature, it may change in any upcoming release in a breaking way.
+	TracingConfig *v1.SecretKeySelector `json:"tracingConfig,omitempty"`
+	// GRPCServerTLSConfig configures the gRPC server from which Thanos Querier reads
+	// recorded rule data.
+	// Note: Currently only the CAFile, CertFile, and KeyFile fields are supported.
+	// Maps to the '--grpc-server-tls-*' CLI args.
+	GRPCServerTLSConfig *TLSConfig `json:"grpcServerTlsConfig,omitempty"`
+	// LogLevel for Thanos sidecar to be configured with.
+	LogLevel string `json:"logLevel,omitempty"`
+	// LogFormat for Thanos sidecar to be configured with.
+	LogFormat string `json:"logFormat,omitempty"`
+	// MinTime for Thanos sidecar to be configured with. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.
+	MinTime string `json:"minTime,omitempty"`
 }
 
 // RemoteWriteSpec defines the remote_write configuration for prometheus.
 // +k8s:openapi-gen=true
 type RemoteWriteSpec struct {
-	//The URL of the endpoint to send samples to.
+	// The URL of the endpoint to send samples to.
 	URL string `json:"url"`
-	//Timeout for requests to the remote write endpoint.
+	// The name of the remote write queue, must be unique if specified. The
+	// name is used in metrics and logging in order to differentiate queues.
+	// Only valid in Prometheus versions 2.15.0 and newer.
+	Name string `json:"name,omitempty"`
+	// Timeout for requests to the remote write endpoint.
 	RemoteTimeout string `json:"remoteTimeout,omitempty"`
-	//The list of remote write relabel configurations.
+	// The list of remote write relabel configurations.
 	WriteRelabelConfigs []RelabelConfig `json:"writeRelabelConfigs,omitempty"`
 	//BasicAuth for the URL.
 	BasicAuth *BasicAuth `json:"basicAuth,omitempty"`
@@ -459,7 +517,7 @@ type RemoteWriteSpec struct {
 	BearerTokenFile string `json:"bearerTokenFile,omitempty"`
 	// TLS Config to use for remote write.
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
-	//Optional ProxyURL
+	// Optional ProxyURL
 	ProxyURL string `json:"proxyUrl,omitempty"`
 	// QueueConfig allows tuning of the remote write queue parameters.
 	QueueConfig *QueueConfig `json:"queueConfig,omitempty"`
@@ -490,17 +548,21 @@ type QueueConfig struct {
 // RemoteReadSpec defines the remote_read configuration for prometheus.
 // +k8s:openapi-gen=true
 type RemoteReadSpec struct {
-	//The URL of the endpoint to send samples to.
+	// The URL of the endpoint to send samples to.
 	URL string `json:"url"`
-	//An optional list of equality matchers which have to be present
+	// The name of the remote read queue, must be unique if specified. The name
+	// is used in metrics and logging in order to differentiate read
+	// configurations.  Only valid in Prometheus versions 2.15.0 and newer.
+	Name string `json:"name,omitempty"`
+	// An optional list of equality matchers which have to be present
 	// in a selector to query the remote read endpoint.
 	RequiredMatchers map[string]string `json:"requiredMatchers,omitempty"`
-	//Timeout for requests to the remote read endpoint.
+	// Timeout for requests to the remote read endpoint.
 	RemoteTimeout string `json:"remoteTimeout,omitempty"`
-	//Whether reads should be made for queries for time ranges that
+	// Whether reads should be made for queries for time ranges that
 	// the local storage should have complete data for.
 	ReadRecent bool `json:"readRecent,omitempty"`
-	//BasicAuth for the URL.
+	// BasicAuth for the URL.
 	BasicAuth *BasicAuth `json:"basicAuth,omitempty"`
 	// bearer token for remote read.
 	BearerToken string `json:"bearerToken,omitempty"`
@@ -508,7 +570,7 @@ type RemoteReadSpec struct {
 	BearerTokenFile string `json:"bearerTokenFile,omitempty"`
 	// TLS Config to use for remote read.
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
-	//Optional ProxyURL
+	// Optional ProxyURL
 	ProxyURL string `json:"proxyUrl,omitempty"`
 }
 
@@ -613,7 +675,7 @@ type ServiceMonitorSpec struct {
 type Endpoint struct {
 	// Name of the service port this endpoint refers to. Mutually exclusive with targetPort.
 	Port string `json:"port,omitempty"`
-	// Name or number of the target port of the endpoint. Mutually exclusive with port.
+	// Name or number of the pod port this endpoint refers to. Mutually exclusive with port.
 	TargetPort *intstr.IntOrString `json:"targetPort,omitempty"`
 	// HTTP path to scrape for metrics.
 	Path string `json:"path,omitempty"`
@@ -679,9 +741,9 @@ type PodMonitorSpec struct {
 // PodMetricsEndpoint defines a scrapeable endpoint of a Kubernetes Pod serving Prometheus metrics.
 // +k8s:openapi-gen=true
 type PodMetricsEndpoint struct {
-	// Name of the port this endpoint refers to. Mutually exclusive with targetPort.
+	// Name of the pod port this endpoint refers to. Mutually exclusive with targetPort.
 	Port string `json:"port,omitempty"`
-	// Name or number of the target port of the endpoint. Mutually exclusive with port.
+	// Deprecated: Use 'port' instead.
 	TargetPort *intstr.IntOrString `json:"targetPort,omitempty"`
 	// HTTP path to scrape for metrics.
 	Path string `json:"path,omitempty"`
@@ -862,11 +924,15 @@ type PrometheusRuleSpec struct {
 // upstream Prometheus struct definitions don't have json struct tags.
 
 // RuleGroup is a list of sequentially evaluated recording and alerting rules.
+// Note: PartialResponseStrategy is only used by ThanosRuler and will
+// be ignored by Prometheus instances.  Valid values for this field are 'warn'
+// or 'abort'.  More info: https://github.com/thanos-io/thanos/blob/master/docs/components/rule.md#partial-response
 // +k8s:openapi-gen=true
 type RuleGroup struct {
-	Name     string `json:"name"`
-	Interval string `json:"interval,omitempty"`
-	Rules    []Rule `json:"rules"`
+	Name                    string `json:"name"`
+	Interval                string `json:"interval,omitempty"`
+	Rules                   []Rule `json:"rules"`
+	PartialResponseStrategy string `json:"partial_response_strategy,omitempty"`
 }
 
 // Rule describes an alerting or recording rule.
@@ -883,6 +949,9 @@ type Rule struct {
 // Alertmanager describes an Alertmanager cluster.
 // +genclient
 // +k8s:openapi-gen=true
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version",description="The version of Alertmanager"
+// +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".spec.replicas",description="The desired replicas number of Alertmanagers"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Alertmanager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -1001,6 +1070,10 @@ type AlertmanagerSpec struct {
 	PriorityClassName string `json:"priorityClassName,omitempty"`
 	// AdditionalPeers allows injecting a set of additional Alertmanagers to peer with to form a highly available cluster.
 	AdditionalPeers []string `json:"additionalPeers,omitempty"`
+	// ClusterAdvertiseAddress is the explicit address to advertise in cluster.
+	// Needs to be provided for non RFC1918 [1] (public) addresses.
+	// [1] RFC1918: https://tools.ietf.org/html/rfc1918
+	ClusterAdvertiseAddress string `json:"clusterAdvertiseAddress,omitempty"`
 	// Port name used for the pods and governing service.
 	// This defaults to web
 	PortName string `json:"portName,omitempty"`
