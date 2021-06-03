@@ -64,12 +64,7 @@ name: publish
 
 trigger:
   event:
-  - push
   - tag
-  branch:
-  - master
-  - version/**
-
 
 steps:
   - name: fetch tags
@@ -88,9 +83,9 @@ steps:
     image: docker:git
     environment:
       USERNAME:
-        from_secret: quay_username
+        from_secret: QUAY_USERNAME
       PASSWORD:
-        from_secret: quay_password
+        from_secret: QUAY_PASSWORD
     commands:
       - apk add --no-cache make
       - docker login -u="$USERNAME" -p="$PASSWORD" quay.io
@@ -113,6 +108,6 @@ volumes:
     temp: {}
 ---
 kind: signature
-hmac: 6dd4a5949f32f88a31f6915a81064184c03ff454ddd02dfac7242f44394464fc
+hmac: 0ea09c32999a30606f81cdef8bfeaede3b4aadb5666d88f4fda6439776f631ce
 
 ...
