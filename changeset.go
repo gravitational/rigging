@@ -30,7 +30,7 @@ import (
 	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	monitoring_scheme "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned/scheme"
 	log "github.com/sirupsen/logrus"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -864,7 +864,7 @@ func (cs *Changeset) statusCustomResourceDefinition(ctx context.Context, data []
 		return trace.Wrap(err)
 	}
 	if uid != "" {
-		existing, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(ctx, crd.Name,
+		existing, err := cs.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name,
 			metav1.GetOptions{})
 		if err != nil {
 			return ConvertError(err)
@@ -1409,7 +1409,7 @@ func (cs *Changeset) deletePodSecurityPolicy(ctx context.Context, tr *ChangesetR
 
 func (cs *Changeset) deleteCustomResourceDefinition(
 	ctx context.Context, tr *ChangesetResource, name string, cascade bool) error {
-	crd, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
+	crd, err := cs.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return ConvertError(err)
 	}
@@ -2804,7 +2804,7 @@ func (cs *Changeset) upsertCustomResourceDefinition(
 		"cs":                        tr.String(),
 		"custom_resource_defintion": formatMeta(crd.ObjectMeta),
 	})
-	current, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().
+	current, err := cs.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().
 		Get(ctx, crd.Name, metav1.GetOptions{})
 	err = ConvertError(err)
 	if err != nil {
@@ -2902,9 +2902,15 @@ func (cs *Changeset) Init(ctx context.Context) error {
 			Name: ChangesetResourceName,
 		},
 		Spec: apiextensions.CustomResourceDefinitionSpec{
-			Group:   ChangesetGroup,
-			Version: ChangesetVersion,
-			Scope:   ChangesetScope,
+			Group: ChangesetGroup,
+			Versions: []apiextensions.CustomResourceDefinitionVersion{
+				{
+					Name:    ChangesetVersion,
+					Storage: true,
+					Served:  true,
+				},
+			},
+			Scope: ChangesetScope,
 			Names: apiextensions.CustomResourceDefinitionNames{
 				Kind:     KindChangeset,
 				Plural:   ChangesetPlural,
@@ -2913,7 +2919,7 @@ func (cs *Changeset) Init(ctx context.Context) error {
 		},
 	}
 
-	_, err := cs.APIExtensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
+	_, err := cs.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
 	err = ConvertError(err)
 	if err != nil {
 		if !trace.IsAlreadyExists(err) {

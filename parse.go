@@ -26,7 +26,7 @@ import (
 	"k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1beta1 "k8s.io/api/scheduling/v1beta1"
-	extensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	extensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
@@ -140,11 +140,11 @@ func ParseConfigMap(r io.Reader) (*v1.ConfigMap, error) {
 }
 
 // ParseCustomResourceDefinition parses a Custom Resource Definition
-func ParseCustomResourceDefinition(r io.Reader) (*extensionsv1beta1.CustomResourceDefinition, error) {
+func ParseCustomResourceDefinition(r io.Reader) (*extensionsv1.CustomResourceDefinition, error) {
 	if r == nil {
 		return nil, trace.BadParameter("missing reader")
 	}
-	cm := extensionsv1beta1.CustomResourceDefinition{}
+	cm := extensionsv1.CustomResourceDefinition{}
 	err := yaml.NewYAMLOrJSONDecoder(r, DefaultBufferSize).Decode(&cm)
 	if err != nil {
 		return nil, trace.Wrap(err)

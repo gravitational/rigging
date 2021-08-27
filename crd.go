@@ -17,7 +17,7 @@ package rigging
 import (
 	"context"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
 	"github.com/gravitational/trace"
@@ -44,7 +44,7 @@ func NewCustomResourceDefinitionControl(
 // CustomResourceDefinitionConfig  is a CustomResourceDefinition control configuration
 type CustomResourceDefinitionConfig struct {
 	// CustomResourceDefinition is already parsed daemon set, will be used if present
-	*v1beta1.CustomResourceDefinition
+	*apiextensions.CustomResourceDefinition
 	// Client is k8s client
 	Client *apiextensionsclientset.Clientset
 }
@@ -70,14 +70,14 @@ type CustomResourceDefinitionControl struct {
 func (c *CustomResourceDefinitionControl) Delete(ctx context.Context, cascade bool) error {
 	c.Infof("delete %v", formatMeta(c.CustomResourceDefinition.ObjectMeta))
 
-	err := c.Client.ApiextensionsV1beta1().CustomResourceDefinitions().Delete(ctx, c.CustomResourceDefinition.Name, metav1.DeleteOptions{})
+	err := c.Client.ApiextensionsV1().CustomResourceDefinitions().Delete(ctx, c.CustomResourceDefinition.Name, metav1.DeleteOptions{})
 	return ConvertError(err)
 }
 
 func (c *CustomResourceDefinitionControl) Upsert(ctx context.Context) error {
 	c.Infof("upsert %v", formatMeta(c.CustomResourceDefinition.ObjectMeta))
 
-	CustomResourceDefinitions := c.Client.ApiextensionsV1beta1().CustomResourceDefinitions()
+	CustomResourceDefinitions := c.Client.ApiextensionsV1().CustomResourceDefinitions()
 	c.CustomResourceDefinition.UID = ""
 	c.CustomResourceDefinition.SelfLink = ""
 	c.CustomResourceDefinition.ResourceVersion = ""
@@ -102,12 +102,12 @@ func (c *CustomResourceDefinitionControl) Upsert(ctx context.Context) error {
 }
 
 func (c *CustomResourceDefinitionControl) Status(ctx context.Context) error {
-	CustomResourceDefinitions := c.Client.ApiextensionsV1beta1().CustomResourceDefinitions()
+	CustomResourceDefinitions := c.Client.ApiextensionsV1().CustomResourceDefinitions()
 	_, err := CustomResourceDefinitions.Get(ctx, c.CustomResourceDefinition.Name, metav1.GetOptions{})
 	return ConvertError(err)
 }
 
-func updateTypeMetaCustomResourceDefinition(r *v1beta1.CustomResourceDefinition) {
+func updateTypeMetaCustomResourceDefinition(r *apiextensions.CustomResourceDefinition) {
 	r.Kind = KindCustomResourceDefinition
 	if r.APIVersion == "" {
 		r.APIVersion = v1.SchemeGroupVersion.String()
