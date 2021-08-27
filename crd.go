@@ -17,7 +17,7 @@ package rigging
 import (
 	"context"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
 	"github.com/gravitational/trace"
@@ -44,7 +44,7 @@ func NewCustomResourceDefinitionControl(
 // CustomResourceDefinitionConfig  is a CustomResourceDefinition control configuration
 type CustomResourceDefinitionConfig struct {
 	// CustomResourceDefinition is already parsed daemon set, will be used if present
-	*v1beta1.CustomResourceDefinition
+	*apiextensions.CustomResourceDefinition
 	// Client is k8s client
 	Client *apiextensionsclientset.Clientset
 }
@@ -107,7 +107,7 @@ func (c *CustomResourceDefinitionControl) Status(ctx context.Context) error {
 	return ConvertError(err)
 }
 
-func updateTypeMetaCustomResourceDefinition(r *v1beta1.CustomResourceDefinition) {
+func updateTypeMetaCustomResourceDefinition(r *apiextensions.CustomResourceDefinition) {
 	r.Kind = KindCustomResourceDefinition
 	if r.APIVersion == "" {
 		r.APIVersion = v1.SchemeGroupVersion.String()

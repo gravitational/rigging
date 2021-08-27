@@ -2902,9 +2902,15 @@ func (cs *Changeset) Init(ctx context.Context) error {
 			Name: ChangesetResourceName,
 		},
 		Spec: apiextensions.CustomResourceDefinitionSpec{
-			Group:   ChangesetGroup,
-			Version: ChangesetVersion,
-			Scope:   ChangesetScope,
+			Group: ChangesetGroup,
+			Versions: []apiextensions.CustomResourceDefinitionVersion{
+				{
+					Name:    ChangesetVersion,
+					Storage: true,
+					Served:  true,
+				},
+			},
+			Scope: ChangesetScope,
 			Names: apiextensions.CustomResourceDefinitionNames{
 				Kind:     KindChangeset,
 				Plural:   ChangesetPlural,
