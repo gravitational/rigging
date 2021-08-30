@@ -34,7 +34,6 @@ docker-build:
 	docker run -i --rm=true \
 		   -u $$(id -u):$$(id -g) -e GOCACHE=/tmp/.cache \
 		   -v $(SRC):$(DST) \
-		   -v $(BUILDDIR):$(DST)/build \
 		   $(BUILDBOX) \
 		   /bin/bash -c "make -C $(DST) build"
 
