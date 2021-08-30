@@ -52,6 +52,8 @@ func ParseShortcut(in, defaultVal string) (string, error) {
 		return KindClusterRole, nil
 	case "psp", "podsecuritypolicies":
 		return KindPodSecurityPolicy, nil
+	case "crds", "customresourcedefinitions":
+		return KindCustomResourceDefinition, nil
 	}
 	return "", trace.BadParameter("unsupported resource: %v", in)
 }

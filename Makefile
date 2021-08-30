@@ -11,13 +11,13 @@ BUILDDIR ?= $(abspath build)
 
 .PHONY: build
 build:
-	go build -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
+	go build -mod=vendor -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
 
 .PHONY: test
 test:
 	go test -v ./ ./tool/...
 
-BUILDBOX := quay.io/gravitational/debian-venti:go1.16.2-buster
+BUILDBOX := quay.io/gravitational/debian-venti:go1.16.7-buster
 
 # Directory with sources inside the container
 DST := /gopath/src/github.com/gravitational/rigging
@@ -34,7 +34,6 @@ docker-build:
 	docker run -i --rm=true \
 		   -u $$(id -u):$$(id -g) -e GOCACHE=/tmp/.cache \
 		   -v $(SRC):$(DST) \
-		   -v $(BUILDDIR):$(DST)/build \
 		   $(BUILDBOX) \
 		   /bin/bash -c "make -C $(DST) build"
 

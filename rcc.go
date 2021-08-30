@@ -157,14 +157,6 @@ func (c *RCControl) Upsert(ctx context.Context) error {
 	return trace.Wrap(err)
 }
 
-func (c *RCControl) nodeSelector() labels.Selector {
-	set := make(labels.Set)
-	for key, val := range c.ReplicationController.Spec.Template.Spec.NodeSelector {
-		set[key] = val
-	}
-	return set.AsSelector()
-}
-
 func (c *RCControl) Status(ctx context.Context) error {
 	rcs := c.Client.CoreV1().ReplicationControllers(c.ReplicationController.Namespace)
 	currentRC, err := rcs.Get(ctx, c.ReplicationController.Name, metav1.GetOptions{})

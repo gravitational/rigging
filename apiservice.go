@@ -20,7 +20,6 @@ import (
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	v1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	apiregistration "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset"
 )
@@ -107,6 +106,6 @@ func (c *APIServiceControl) Status(ctx context.Context) error {
 func updateTypeMetaAPIService(s *v1.APIService) {
 	s.Kind = KindAPIService
 	if s.APIVersion == "" {
-		s.APIVersion = apiregistrationv1.SchemeGroupVersion.String()
+		s.APIVersion = v1.SchemeGroupVersion.String()
 	}
 }
