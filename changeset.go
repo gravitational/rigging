@@ -42,6 +42,7 @@ import (
 	"k8s.io/client-go/rest"
 	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	apiregistration "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset"
+	"k8s.io/utils/pointer"
 )
 
 func init() {
@@ -454,7 +455,7 @@ func (cs *Changeset) revertIncompleteOperation(ctx context.Context, changesetNam
 	// incomplete.
 	tr.Spec.Items = tr.Spec.Items[:len(tr.Spec.Items)-1]
 
-	tr, err = cs.update(ctx, tr)
+	_, err = cs.update(ctx, tr)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -2908,6 +2909,11 @@ func (cs *Changeset) Init(ctx context.Context) error {
 					Name:    ChangesetVersion,
 					Storage: true,
 					Served:  true,
+					Schema: &apiextensions.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+							XPreserveUnknownFields: pointer.BoolPtr(true),
+						},
+					},
 				},
 			},
 			Scope: ChangesetScope,
@@ -2961,17 +2967,6 @@ func (cs *Changeset) Create(ctx context.Context, namespace, name string) (*Chang
 		},
 	}
 	return cs.create(ctx, res)
-}
-
-func (cs *Changeset) upsert(ctx context.Context, tr *ChangesetResource) (*ChangesetResource, error) {
-	out, err := cs.create(ctx, tr)
-	if err == nil {
-		return out, nil
-	}
-	if !trace.IsAlreadyExists(err) {
-		return nil, err
-	}
-	return cs.update(ctx, tr)
 }
 
 func (cs *Changeset) create(ctx context.Context, tr *ChangesetResource) (*ChangesetResource, error) {

@@ -11,7 +11,7 @@ BUILDDIR ?= $(abspath build)
 
 .PHONY: build
 build:
-	go build -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
+	GOOS=linux GOARCH=amd64 go build -ldflags '-w' -o $(BUILDDIR)/rig github.com/gravitational/rigging/tool/rig
 
 .PHONY: test
 test:
