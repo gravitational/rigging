@@ -22,7 +22,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -85,7 +84,7 @@ func (c *DeploymentControl) Delete(ctx context.Context, cascade bool) error {
 		// scale deployment down to delete the pods
 		var replicas int32
 		currentDeployment.Spec.Replicas = &replicas
-		currentDeployment, err = deployments.Update(ctx, currentDeployment, metav1.UpdateOptions{})
+		_, err = deployments.Update(ctx, currentDeployment, metav1.UpdateOptions{})
 		if err != nil {
 			return ConvertError(err)
 		}
@@ -138,14 +137,6 @@ func (c *DeploymentControl) Upsert(ctx context.Context) error {
 
 	_, err = deployments.Update(ctx, c.Deployment, metav1.UpdateOptions{})
 	return ConvertError(err)
-}
-
-func (c *DeploymentControl) nodeSelector() labels.Selector {
-	set := make(labels.Set)
-	for key, val := range c.Deployment.Spec.Template.Spec.NodeSelector {
-		set[key] = val
-	}
-	return set.AsSelector()
 }
 
 func (c *DeploymentControl) Status(ctx context.Context) error {

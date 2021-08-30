@@ -109,7 +109,7 @@ func CollectPods(ctx context.Context, namespace string, matchLabels map[string]s
 		return nil, ConvertError(err)
 	}
 
-	pods := make(map[string]v1.Pod, 0)
+	pods := make(map[string]v1.Pod)
 	for _, pod := range podList.Items {
 		for _, ref := range pod.OwnerReferences {
 			if fn(ref) {
@@ -137,38 +137,6 @@ func retry(ctx context.Context, times int, period time.Duration, fn func(ctx con
 		err = fn(ctx)
 	}
 	return err
-}
-
-func withRecover(fn func() error, recoverFn func() error) error {
-	shouldRecover := true
-	defer func() {
-		if !shouldRecover {
-			log.Infof("no recovery needed, returning")
-			return
-		}
-		log.Infof("need to recover")
-		err := recoverFn()
-		if err != nil {
-			log.Error(trace.DebugReport(err))
-			return
-		}
-		log.Infof("recovered successfully")
-		return
-	}()
-
-	if err := fn(); err != nil {
-		return err
-	}
-	shouldRecover = false
-	return nil
-}
-
-func nodeSelector(spec *v1.PodSpec) labels.Selector {
-	set := make(labels.Set)
-	for key, val := range spec.NodeSelector {
-		set[key] = val
-	}
-	return set.AsSelector()
 }
 
 func checkRunning(pods map[string]v1.Pod, nodes []v1.Node, logger log.FieldLogger) error {
